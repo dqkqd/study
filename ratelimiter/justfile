@@ -1,0 +1,4 @@
+set dotenv-load
+
+request_to_server:
+  curl --header "Content-Type: application/json" --data '{"package": "123"}' localhost:$SERVER_PORT
