@@ -1,6 +1,10 @@
 [package]
-name = "rust"
+name = "ratelimiter"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+http-body-util = "0.1.2"
+hyper = { version = "1.5.0", features = ["client", "server"] }
+hyper-util = { version = "0.1.9", features = ["http1", "server", "tokio"] }
+tokio = { version = "1.41.0", features = ["io-std", "io-util", "macros", "net", "rt-multi-thread", "sync"] }
