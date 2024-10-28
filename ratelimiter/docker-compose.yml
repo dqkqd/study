@@ -7,3 +7,7 @@ services:
     build: ./rust
     ports:
       - 3001:3001
+  cache:
+    image: redis:7.4-alpine
+    ports:
+      - 6379:6379

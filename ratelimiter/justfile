@@ -5,3 +5,16 @@ to_server:
 
 to_ratelimiter:
   curl --header "Content-Type: application/json" --data '{"package": "123"}' localhost:3001
+
+build:
+  docker compose up --build -d
+
+log:
+  docker compose logs
+
+test: build
+  #!/usr/bin/env sh
+  while true; do
+    curl --header "Content-Type: application/json" --data '{"package": "123"}' localhost:3001
+    sleep 0.1
+  done
