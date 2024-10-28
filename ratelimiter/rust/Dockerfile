@@ -1,5 +1,5 @@
 ARG RUST_VERSION=1.82
-ARG APP_NAME=server
+ARG APP_NAME=ratelimiter
 
 FROM rust:${RUST_VERSION}-alpine3.19 AS build
 ARG APP_NAME
@@ -20,5 +20,5 @@ EOF
 FROM debian:bullseye-slim
 RUN apt-get update && apt-get install -y musl-dev && rm -rf /var/lib/apt/lists/*
 COPY --from=build /bin/app /bin/
-EXPOSE 3000
+EXPOSE 3001
 CMD ["app"]
