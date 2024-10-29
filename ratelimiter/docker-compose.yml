@@ -1,13 +1,9 @@
 services:
   server:
     build: ./server
-    ports:
-      - 3000:3000
   rust-ratelimiter:
     build: ./rust
     ports:
       - 3001:3001
   cache:
     image: redis:7.4-alpine
-    ports:
-      - 6379:6379

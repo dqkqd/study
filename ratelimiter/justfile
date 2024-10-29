@@ -1,9 +1,6 @@
 set dotenv-load
 
-to_server:
-  curl --header "Content-Type: application/json" --data '{"package": "123"}' localhost:3000
-
-to_ratelimiter:
+request:
   curl --header "Content-Type: application/json" --data '{"package": "123"}' localhost:3001
 
 build:
