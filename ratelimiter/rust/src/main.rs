@@ -3,7 +3,6 @@ use std::{net::SocketAddr, time::SystemTime};
 use http_body_util::{BodyExt, Full};
 use hyper::{body::Bytes, server::conn::http1, service::service_fn, Request, Response};
 use hyper_util::rt::TokioIo;
-use redis::Commands;
 use tokio::{
     io::{self, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -35,7 +34,7 @@ async fn main() -> Result<()> {
 
 async fn service(req: Request<hyper::body::Incoming>) -> Result<Response<Full<Bytes>>> {
     let mut token_bucket = TokenBucket::new(10, 3)?;
-    if token_bucket.accepted(&req)? {
+    if token_bucket.accepted(&req) {
         forward(req).await
     } else {
         let resp = Response::builder()
@@ -70,62 +69,49 @@ impl TokenBucket {
         host
     }
 
-    fn refill(&mut self, req: &Request<hyper::body::Incoming>) -> Result<u64> {
+    fn accepted(&mut self, req: &Request<hyper::body::Incoming>) -> bool {
         let tokens_key = Self::key(req);
         let update_at_key = format!("{}_update_at", &tokens_key);
 
-        // get the latest modified key
-        let tokens: u64 = redis::transaction(
-            &mut self.redis_connection,
-            &[&tokens_key, &update_at_key],
-            |con, pipe| {
-                let now = SystemTime::now()
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs();
+        let script = r#"
+local tokens_key = KEYS[1]
+local update_at_key = KEYS[2]
+local limit = tonumber(ARGV[1])
+local rate = tonumber(ARGV[2])
 
-                let ((tokens, update_at),): ((u64, u64),) = pipe
-                    .set_nx(&tokens_key, self.limit)
-                    .ignore()
-                    .set_nx(&update_at_key, now)
-                    .ignore()
-                    .mget(&[&tokens_key, &update_at_key])
-                    .query(con)?;
+local tokens = tonumber(redis.call('GET', tokens_key) or limit)
+local now = tonumber(ARGV[3])
+local update_at = tonumber(redis.call('GET', update_at_key) or now)
 
-                if tokens >= self.limit {
-                    return Ok(Some(tokens));
-                }
+local duration = now - update_at
+local add_tokens = duration * rate
+local new_tokens = tokens + add_tokens
+if new_tokens > limit then
+    new_tokens = limit
+end
 
-                let duration = now - update_at;
-                let add_tokens = duration * self.rate;
-                let new_tokens = (tokens + add_tokens).min(self.limit);
-                let tokens = if new_tokens > tokens {
-                    () = pipe
-                        .set(&tokens_key, new_tokens)
-                        .ignore()
-                        .set(&update_at_key, now)
-                        .ignore()
-                        .query(con)?;
-                    new_tokens
-                } else {
-                    tokens
-                };
+if new_tokens > 0 then
+    redis.call('SET', tokens_key, new_tokens - 1)
+    redis.call('SET', update_at_key, now)
+    return true
+else
+    return false
+end
+        "#;
 
-                Ok(Some(tokens))
-            },
-        )?;
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
 
-        Ok(tokens)
-    }
-
-    fn accepted(&mut self, req: &Request<hyper::body::Incoming>) -> Result<bool> {
-        let current_tokens = self.refill(req)?;
-        if current_tokens > 0 {
-            () = self.redis_connection.decr(Self::key(req), 1)?;
-            Ok(true)
-        } else {
-            Ok(false)
-        }
+        redis::Script::new(script)
+            .key(&tokens_key)
+            .key(&update_at_key)
+            .arg(self.limit)
+            .arg(self.rate)
+            .arg(now)
+            .invoke(&mut self.redis_connection)
+            .unwrap_or_default()
     }
 }
 
