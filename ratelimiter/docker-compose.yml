@@ -1,8 +1,8 @@
 services:
   server:
     build: ./server
-  rust-ratelimiter:
-    build: ./rust
+  ratelimiter:
+    build: ./ratelimiter
     ports:
       - 3001:3001
     environment:
