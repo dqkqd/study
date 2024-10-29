@@ -5,5 +5,8 @@ services:
     build: ./rust
     ports:
       - 3001:3001
+    environment:
+      LIMIT: 10
+      RATE: 3
   cache:
     image: redis:7.4-alpine

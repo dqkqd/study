@@ -1,5 +1,3 @@
-set dotenv-load
-
 request:
   curl --header "Content-Type: application/json" --data '{"package": "123"}' localhost:3001
 

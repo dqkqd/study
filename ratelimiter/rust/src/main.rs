@@ -33,7 +33,16 @@ async fn main() -> Result<()> {
 }
 
 async fn service(req: Request<hyper::body::Incoming>) -> Result<Response<Full<Bytes>>> {
-    let mut token_bucket = TokenBucket::new(10, 3)?;
+    let get_env_as_int = |key, default| {
+        std::env::var(key)
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .unwrap_or(default)
+    };
+    let limit = get_env_as_int("LIMIT", 10);
+    let rate = get_env_as_int("RATE", 3);
+
+    let mut token_bucket = TokenBucket::new(limit, rate)?;
     if token_bucket.accepted(&req) {
         forward(req).await
     } else {
