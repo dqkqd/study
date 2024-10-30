@@ -1,8 +1,8 @@
 mod algo;
 
-use algo::Ratelimiter;
+pub use algo::Ratelimiter;
 use http_body_util::{BodyExt, Full};
-use hyper::{body::Bytes, Request, Response};
+use hyper::{body::Bytes, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
 use tokio::{
     io::{self, AsyncWriteExt},
@@ -14,19 +14,23 @@ pub(crate) type IncomingRequest = Request<hyper::body::Incoming>;
 pub(crate) type FullResponse = Response<Full<Bytes>>;
 
 pub async fn service(req: IncomingRequest) -> Result<FullResponse> {
-    let mut ratelimiter = Ratelimiter::new()?;
-    if ratelimiter.accepted(&req) {
-        ratelimiter.accept_request(req).await
-    } else {
-        ratelimiter.drop_request().await
-    }
+    Ratelimiter::new()?.try_accept_request(req).await
 }
 
 async fn forward_request_to_server(req: IncomingRequest) -> Result<FullResponse> {
+    let bytes = convert_request_to_bytes(req).await?;
+    let resp = forward_bytes_to_server(bytes).await?;
+    Ok(resp)
+}
+
+async fn convert_request_to_bytes(req: IncomingRequest) -> Result<Bytes> {
     eprintln!("{:#?}", &req);
     let body = req.into_body();
     let bytes = body.collect().await.map(|collected| collected.to_bytes())?;
+    Ok(bytes)
+}
 
+async fn forward_bytes_to_server(bytes: Bytes) -> Result<FullResponse> {
     let stream = TcpStream::connect("server:3000").await?;
     let io = TokioIo::new(stream);
 
@@ -53,5 +57,9 @@ async fn forward_request_to_server(req: IncomingRequest) -> Result<FullResponse>
     buffer.flush().await?;
     buf.push(b'\n');
 
-    Ok(Response::new(Full::new(Bytes::from(buf))))
+    let resp = Response::builder()
+        .status(StatusCode::OK)
+        .body(Full::new(Bytes::from(buf)))?;
+
+    Ok(resp)
 }

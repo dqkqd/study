@@ -4,7 +4,7 @@ use hyper::Request;
 
 use crate::{forward_request_to_server, FullResponse, IncomingRequest, Result};
 
-use super::{get_env, get_redis_connection};
+use super::{get_env, get_redis_connection, host, too_many_request};
 
 pub struct TokenBucket {
     limit: u64,
@@ -24,22 +24,19 @@ impl TokenBucket {
         })
     }
 
-    pub(super) async fn accept_request(&self, req: IncomingRequest) -> Result<FullResponse> {
-        forward_request_to_server(req).await
-    }
-
-    fn key<R>(req: &Request<R>) -> String {
-        let host = req
-            .headers()
-            .get(hyper::header::HOST)
-            .and_then(|host| host.to_str().ok())
-            .unwrap_or_default()
-            .to_string();
-        host
+    pub(super) async fn try_accept_request(
+        &mut self,
+        req: IncomingRequest,
+    ) -> Result<FullResponse> {
+        if self.accepted(&req) {
+            forward_request_to_server(req).await
+        } else {
+            too_many_request().await
+        }
     }
 
     pub(super) fn accepted<R>(&mut self, req: &Request<R>) -> bool {
-        let tokens_key = Self::key(req);
+        let tokens_key = host(req);
         let update_at_key = format!("{}_update_at", &tokens_key);
 
         let script = r#"

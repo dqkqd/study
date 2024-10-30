@@ -6,6 +6,7 @@ services:
     ports:
       - 3001:3001
     environment:
+      ALGO: leaky_bucket
       LIMIT: 10
       RATE: 3
   cache:
