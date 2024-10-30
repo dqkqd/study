@@ -1,9 +1,11 @@
+mod leaky_bucket;
 mod token_bucket;
-use hyper::Request;
+use http_body_util::Full;
+use hyper::{body::Bytes, Request, Response};
 use redis::Connection;
 use token_bucket::TokenBucket;
 
-use crate::Result;
+use crate::{FullResponse, IncomingRequest, Result};
 
 pub(crate) enum Ratelimiter {
     TokenBucket(TokenBucket),
@@ -18,6 +20,17 @@ impl Ratelimiter {
         match self {
             Ratelimiter::TokenBucket(token_bucket) => token_bucket.accepted(req),
         }
+    }
+    pub(crate) async fn accept_request(&self, req: IncomingRequest) -> Result<FullResponse> {
+        match self {
+            Ratelimiter::TokenBucket(token_bucket) => token_bucket.accept_request(req).await,
+        }
+    }
+    pub(crate) async fn drop_request(&self) -> Result<FullResponse> {
+        let resp = Response::builder()
+            .status(429)
+            .body(Full::new(Bytes::from("Too many request\n")))?;
+        Ok(resp)
     }
 }
 

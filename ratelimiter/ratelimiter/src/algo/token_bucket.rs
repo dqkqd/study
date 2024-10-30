@@ -2,7 +2,7 @@ use std::time::SystemTime;
 
 use hyper::Request;
 
-use crate::Result;
+use crate::{forward_request_to_server, FullResponse, IncomingRequest, Result};
 
 use super::{get_env, get_redis_connection};
 
@@ -22,6 +22,10 @@ impl TokenBucket {
             rate,
             redis_connection,
         })
+    }
+
+    pub(super) async fn accept_request(&self, req: IncomingRequest) -> Result<FullResponse> {
+        forward_request_to_server(req).await
     }
 
     fn key<R>(req: &Request<R>) -> String {
