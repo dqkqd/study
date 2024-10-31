@@ -6,8 +6,8 @@ services:
     ports:
       - 3001:3001
     environment:
-      ALGO: leaky_bucket
-      LIMIT: 10
+      ALGO: fixed_window
+      LIMIT: 3
       RATE: 3
   cache:
     image: redis:7.4-alpine

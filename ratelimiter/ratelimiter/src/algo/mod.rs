@@ -1,5 +1,7 @@
+mod fixed_window;
 mod leaky_bucket;
 mod token_bucket;
+use fixed_window::FixedWindow;
 use http_body_util::Full;
 use hyper::{body::Bytes, Request, Response, StatusCode};
 use leaky_bucket::LeakyBucket;
@@ -11,6 +13,7 @@ use crate::{FullResponse, IncomingRequest, Result};
 pub enum Ratelimiter {
     TokenBucket(TokenBucket),
     LeakyBucket(LeakyBucket),
+    FixedWindow(FixedWindow),
 }
 
 impl Ratelimiter {
@@ -19,6 +22,7 @@ impl Ratelimiter {
         let ratelimiter = match algo.as_str() {
             "token_bucket" => Ratelimiter::TokenBucket(TokenBucket::new()?),
             "leaky_bucket" => Ratelimiter::LeakyBucket(LeakyBucket::new()?),
+            "fixed_window" => Ratelimiter::FixedWindow(FixedWindow::new()?),
             _ => unimplemented!("{}", algo),
         };
         Ok(ratelimiter)
@@ -31,6 +35,7 @@ impl Ratelimiter {
         match self {
             Ratelimiter::TokenBucket(token_bucket) => token_bucket.try_accept_request(req).await,
             Ratelimiter::LeakyBucket(leaky_bucket) => leaky_bucket.try_accept_request(req).await,
+            Ratelimiter::FixedWindow(fixed_window) => fixed_window.try_accept_request(req).await,
         }
     }
 
