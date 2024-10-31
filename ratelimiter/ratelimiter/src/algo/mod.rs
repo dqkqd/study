@@ -1,5 +1,6 @@
 mod fixed_window;
 mod leaky_bucket;
+mod sliding_window_counter;
 mod sliding_window_log;
 mod token_bucket;
 use fixed_window::FixedWindow;
@@ -7,6 +8,7 @@ use http_body_util::Full;
 use hyper::{body::Bytes, Request, Response, StatusCode};
 use leaky_bucket::LeakyBucket;
 use redis::Connection;
+use sliding_window_counter::SlidingWindowCounter;
 use sliding_window_log::SlidingWindowLog;
 use token_bucket::TokenBucket;
 
@@ -17,6 +19,7 @@ pub enum Ratelimiter {
     LeakyBucket(LeakyBucket),
     FixedWindow(FixedWindow),
     SlidingWindowLog(SlidingWindowLog),
+    SlidingWindowCounter(SlidingWindowCounter),
 }
 
 impl Ratelimiter {
@@ -27,6 +30,9 @@ impl Ratelimiter {
             "leaky_bucket" => Ratelimiter::LeakyBucket(LeakyBucket::new()?),
             "fixed_window" => Ratelimiter::FixedWindow(FixedWindow::new()?),
             "sliding_window_log" => Ratelimiter::SlidingWindowLog(SlidingWindowLog::new()?),
+            "sliding_window_counter" => {
+                Ratelimiter::SlidingWindowCounter(SlidingWindowCounter::new()?)
+            }
             _ => unimplemented!("{}", algo),
         };
         Ok(ratelimiter)
@@ -42,6 +48,9 @@ impl Ratelimiter {
             Ratelimiter::FixedWindow(fixed_window) => fixed_window.try_accept_request(req).await,
             Ratelimiter::SlidingWindowLog(sliding_window_log) => {
                 sliding_window_log.try_accept_request(req).await
+            }
+            Ratelimiter::SlidingWindowCounter(sliding_window_counter) => {
+                sliding_window_counter.try_accept_request(req).await
             }
         }
     }
