@@ -8,7 +8,6 @@ use tokio::net::TcpListener;
 async fn service(
     req: Request<hyper::body::Incoming>,
 ) -> Result<Response<Full<Bytes>>, hyper::Error> {
-    eprintln!("{:#?}", &req);
     let body = req.into_body();
     let bytes = body.collect().await.map(|collected| collected.to_bytes())?;
     Ok(Response::new(Full::new(bytes)))

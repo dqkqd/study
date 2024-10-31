@@ -24,7 +24,6 @@ async fn forward_request_to_server(req: IncomingRequest) -> Result<FullResponse>
 }
 
 async fn convert_request_to_bytes(req: IncomingRequest) -> Result<Bytes> {
-    eprintln!("{:#?}", &req);
     let body = req.into_body();
     let bytes = body.collect().await.map(|collected| collected.to_bytes())?;
     Ok(bytes)

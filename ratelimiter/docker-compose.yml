@@ -6,7 +6,7 @@ services:
     ports:
       - 3001:3001
     environment:
-      ALGO: fixed_window
+      ALGO: sliding_window_log
       LIMIT: 3
       RATE: 3
   cache:
