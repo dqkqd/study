@@ -13,6 +13,9 @@ func TestSuccess(t *testing.T) {
 		{"set 2 3", Command{key: "2", value: "3", cmdType: SetCommand}},
 		{"get 1", Command{key: "1", cmdType: GetCommand}},
 		{"get 2", Command{key: "2", cmdType: GetCommand}},
+		// trim space for keys and values
+		{"set    2    3   ", Command{key: "2", value: "3", cmdType: SetCommand}},
+		{"get         3", Command{key: "3", cmdType: GetCommand}},
 	}
 
 	for _, tc := range testCases {

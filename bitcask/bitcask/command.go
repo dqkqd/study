@@ -30,9 +30,12 @@ func (c Command) String() string {
 }
 
 func ParseCommand(input string) (Command, error) {
-	s := strings.Split(input, " ")
-	for i := range s {
-		s[i] = strings.TrimSpace(s[i])
+	s := []string{}
+	for _, c := range strings.Split(input, " ") {
+		c = strings.TrimSpace(c)
+		if len(c) > 0 {
+			s = append(s, c)
+		}
 	}
 
 	invalid := func(msg string) (Command, error) {
