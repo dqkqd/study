@@ -11,6 +11,8 @@ import (
 
 func main() {
 	reader := bufio.NewReader(os.Stdin)
+	db := bitcask.NewDatabase()
+
 	for {
 		fmt.Print(">>> ")
 
@@ -23,12 +25,6 @@ func main() {
 		if len(input) == 0 {
 			continue
 		}
-
-		cmd, err := bitcask.ParseCommand(input)
-		if err != nil {
-			fmt.Println(err)
-		} else {
-			fmt.Println(cmd)
-		}
+		db.HandleQuery(input)
 	}
 }
