@@ -28,13 +28,24 @@ func (db Database) HandleQuery(query string) {
 	}
 }
 
-type Database struct {
-	activeDatafile ActiveDatafile
-	keydir         Keydir
-	folder         string
+type Config struct {
+	DatafileThreshold uint32
 }
 
-func OpenDatabase(folder string) (db Database, err error) {
+type Database struct {
+	activeDatafile *ActiveDatafile
+	keydir         Keydir
+	folder         string
+	cfg            Config
+}
+
+func DefaultDatabaseConfig() Config {
+	return Config{
+		DatafileThreshold: 1<<16 - 1,
+	}
+}
+
+func OpenDatabase(folder string, cfg Config) (db Database, err error) {
 	err = os.MkdirAll(folder, 0700)
 	if err != nil {
 		return db, err
@@ -48,12 +59,16 @@ func OpenDatabase(folder string) (db Database, err error) {
 
 	kd := OpenKeydir()
 
-	return Database{d, kd, folder}, nil
+	return Database{&d, kd, folder, cfg}, nil
 }
 
 func (db Database) Set(cmd Command) error {
 	if cmd.cmdType != SetCommand {
 		panic("Expected set command")
+	}
+
+	if db.shouldRollover() {
+		db.rollover()
 	}
 
 	// first, save to active file
@@ -93,4 +108,18 @@ func (db Database) Get(cmd Command) (value string, err error) {
 	}
 
 	return string(record.value), err
+}
+
+func (db Database) shouldRollover() bool {
+	return db.activeDatafile.sz >= db.cfg.DatafileThreshold
+}
+
+func (db Database) rollover() error {
+	nextId := db.activeDatafile.id + 1
+	d, err := OpenAsActiveDatafile(&db.folder, nextId)
+	if err != nil {
+		return err
+	}
+	db.activeDatafile = &d
+	return nil
 }

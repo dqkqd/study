@@ -2,15 +2,16 @@ package bitcask
 
 import (
 	"fmt"
+	"os"
 	"testing"
 )
 
 func TestDbQuery(t *testing.T) {
 	dir := t.TempDir()
 	dbfolder := fmt.Sprintf("%s/%s", dir, "testdb")
-	db, err := OpenDatabase(dbfolder)
+	db, err := OpenDatabase(dbfolder, DefaultDatabaseConfig())
 	if err != nil {
-		t.Errorf("Cannot open db %s", err)
+		t.Error(err)
 	}
 
 	var cmd Command
@@ -40,9 +41,9 @@ func TestDbQuery(t *testing.T) {
 func TestDbGet(t *testing.T) {
 	dir := t.TempDir()
 	dbfolder := fmt.Sprintf("%s/%s", dir, "testdb")
-	db, err := OpenDatabase(dbfolder)
+	db, err := OpenDatabase(dbfolder, DefaultDatabaseConfig())
 	if err != nil {
-		t.Errorf("Cannot open db %s", err)
+		t.Error(err)
 	}
 
 	testcases := []Command{
@@ -75,7 +76,7 @@ func TestDbGet(t *testing.T) {
 func TestDbGetOverwrite(t *testing.T) {
 	dir := t.TempDir()
 	dbfolder := fmt.Sprintf("%s/%s", dir, "testdb")
-	db, err := OpenDatabase(dbfolder)
+	db, err := OpenDatabase(dbfolder, DefaultDatabaseConfig())
 	if err != nil {
 		t.Error(err)
 	}
@@ -104,5 +105,61 @@ func TestDbGetOverwrite(t *testing.T) {
 	}
 	if value != "new value" {
 		t.Errorf("Got %s, want `new value`", value)
+	}
+}
+
+func TestDbRollover(t *testing.T) {
+	dir := t.TempDir()
+	dbfolder := fmt.Sprintf("%s/%s", dir, "testdb")
+
+	cfg := DefaultDatabaseConfig()
+	cfg.DatafileThreshold = 1 // always rollover
+
+	db, err := OpenDatabase(dbfolder, cfg)
+	if err != nil {
+		t.Error(err)
+	}
+
+	shouldHaveTotalFiles := func(expected int) {
+		files, err := os.ReadDir(dbfolder)
+		if err != nil {
+			t.Error(err)
+		}
+		if len(files) != expected {
+			t.Errorf("Expect %d datafile, has %d", expected, len(files))
+		}
+	}
+
+	shouldHaveTotalFiles(1)
+
+	err = db.Set(Command{"key1", "value1", SetCommand})
+	if err != nil {
+		t.Error(err)
+	}
+
+	shouldHaveTotalFiles(1)
+
+	err = db.Set(Command{"key2", "value2", SetCommand})
+	if err != nil {
+		t.Error(err)
+	}
+
+	shouldHaveTotalFiles(2)
+
+	// should be able to get rolled over values
+	value, err := db.Get(Command{key: "key1", cmdType: GetCommand})
+	if err != nil {
+		t.Error(err)
+	}
+	if value != "value1" {
+		t.Errorf("Got %s, want `value1`", value)
+	}
+
+	value, err = db.Get(Command{key: "key2", cmdType: GetCommand})
+	if err != nil {
+		t.Error(err)
+	}
+	if value != "value2" {
+		t.Errorf("Got %s, want `value2`", value)
 	}
 }
