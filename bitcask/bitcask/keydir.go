@@ -22,8 +22,12 @@ func OpenKeydir(folder *string) Keydir {
 }
 
 func (k Keydir) Save(key, value string, fid uint16) error {
-	df := ActiveDatafile{k.folder, fid}
-	pos, sz, err := df.Save(key, value)
+	d, err := OpenAsActiveDatafile(k.folder, fid)
+	if err != nil {
+		return err
+	}
+
+	pos, sz, err := d.Save(key, value)
 	if err != nil {
 		return err
 	}

@@ -6,7 +6,10 @@ import (
 
 func TestDatafileGetRecords(t *testing.T) {
 	dir := t.TempDir()
-	df := ActiveDatafile{&dir, 1}
+	df, err := OpenAsActiveDatafile(&dir, 1)
+	if err != nil {
+		t.Fail()
+	}
 
 	testcases := []struct {
 		key, value string

@@ -15,40 +15,49 @@ type ReadonlyDatafile struct {
 }
 
 type ActiveDatafile struct {
+	f      *os.File // always hold file pointer for reading and writing
 	folder *string
 	id     uint16
 }
 
-func (d ReadonlyDatafile) Active() ActiveDatafile {
-	return ActiveDatafile(d)
+func (d ReadonlyDatafile) Active() (*ActiveDatafile, error) {
+	return OpenAsActiveDatafile(d.folder, d.id)
 }
 
 func (d ReadonlyDatafile) Get(pos uint32, sz uint32) (r Record, err error) {
-	return getRecord(filepath(*d.folder, d.id), pos, sz)
+	f, err := os.Open(filepath(*d.folder, d.id))
+	if err != nil {
+		return r, err
+	}
+	return getRecord(f, pos, sz)
 }
 
-func (d ActiveDatafile) Readonly() ReadonlyDatafile {
-	return ReadonlyDatafile(d)
+func (d *ActiveDatafile) Readonly() ReadonlyDatafile {
+	defer func() { d = nil }()
+	return ReadonlyDatafile{d.folder, d.id}
+}
+
+func OpenAsActiveDatafile(folder *string, id uint16) (*ActiveDatafile, error) {
+	f, err := os.OpenFile(filepath(*folder, id), os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		return nil, err
+	}
+	return &ActiveDatafile{f, folder, id}, nil
 }
 
 func (d ActiveDatafile) Get(pos uint32, sz uint32) (r Record, err error) {
-	return getRecord(filepath(*d.folder, d.id), pos, sz)
+	return getRecord(d.f, pos, sz)
 }
 
 func (d ActiveDatafile) Save(k string, v string) (pos uint32, sz uint32, err error) {
-	return saveRecord(filepath(*d.folder, d.id), k, v)
+	return saveRecord(d.f, k, v)
 }
 
 func filepath(folder string, id uint16) string {
 	return path.Join(fmt.Sprintf("%s/%d.%s", folder, id, DATA_FILE_EXT))
 }
 
-func getRecord(fp string, pos uint32, sz uint32) (r Record, err error) {
-	f, err := os.Open(fp)
-	if err != nil {
-		return r, err
-	}
-
+func getRecord(f *os.File, pos uint32, sz uint32) (r Record, err error) {
 	buf := make([]byte, sz)
 	n, err := f.ReadAt(buf, int64(pos))
 	if err != nil {
@@ -61,12 +70,7 @@ func getRecord(fp string, pos uint32, sz uint32) (r Record, err error) {
 	return RecordFromBytes(buf), nil
 }
 
-func saveRecord(fp, k, v string) (pos, sz uint32, err error) {
-	f, err := os.OpenFile(fp, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return pos, sz, err
-	}
-
+func saveRecord(f *os.File, k, v string) (pos, sz uint32, err error) {
 	r := NewRecord(k, v)
 	buf, err := r.Bytes()
 	if err != nil {
