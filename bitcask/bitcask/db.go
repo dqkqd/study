@@ -55,14 +55,42 @@ func (db Database) Set(cmd Command) error {
 	if cmd.cmdType != SetCommand {
 		panic("Expected set command")
 	}
-	err := db.keydir.Save(db.activeDatafile, cmd.key, cmd.value)
-	return err
+
+	// first, save to active file
+	pos, sz, err := db.activeDatafile.Save(cmd.key, cmd.value)
+	if err != nil {
+		return err
+	}
+
+	// then save to keydir
+	// TODO: handle tstamp
+	db.keydir[cmd.key] = ValuePos{db.activeDatafile.id, sz, pos, 0}
+
+	return nil
 }
 
 func (db Database) Get(cmd Command) (value string, err error) {
 	if cmd.cmdType != GetCommand {
 		panic("Expected get command")
 	}
-	record, err := db.keydir.Get(db.activeDatafile, cmd.key)
+
+	// get the key's position from keydir
+	vp, ok := db.keydir[cmd.key]
+	if !ok {
+		return value, fmt.Errorf("Not existed key %s", cmd.key)
+	}
+
+	var record Record
+
+	if db.activeDatafile.id == vp.fid {
+		// This key is in active file, we can get it without opening new files
+		record, err = db.activeDatafile.Get(vp.valuepos, vp.valuesz)
+	} else {
+		// This key is in other files, need to open and read it
+		// TODO: cover test for this
+		rd := ReadonlyDatafile{&db.folder, vp.fid}
+		record, err = rd.Get(vp.valuepos, vp.valuesz)
+	}
+
 	return string(record.value), err
 }
