@@ -11,37 +11,38 @@ type ValuePos struct {
 
 type Keydir struct {
 	values map[string]ValuePos
-	folder *string
 }
 
-func OpenKeydir(folder *string) Keydir {
+func OpenKeydir() Keydir {
 	return Keydir{
 		map[string]ValuePos{},
-		folder,
 	}
 }
 
-func (k Keydir) Save(key, value string, fid uint16) error {
-	d, err := OpenAsActiveDatafile(k.folder, fid)
-	if err != nil {
-		return err
-	}
-
+func (k Keydir) Save(d ActiveDatafile, key, value string) error {
 	pos, sz, err := d.Save(key, value)
 	if err != nil {
 		return err
 	}
 
 	// TODO: handle valuesz and tstamp
-	k.values[key] = ValuePos{fid, sz, pos, 0}
+	k.values[key] = ValuePos{d.id, sz, pos, 0}
 	return nil
 }
 
-func (k Keydir) Get(key string) (r Record, err error) {
+func (k Keydir) Get(d ActiveDatafile, key string) (r Record, err error) {
 	vp, ok := k.values[key]
 	if !ok {
 		return r, fmt.Errorf("Cannot get datafile for key %s", key)
 	}
-	df := ReadonlyDatafile{k.folder, vp.fid}
-	return df.Get(vp.valuepos, vp.valuesz)
+
+	if d.id == vp.fid {
+		// This key is in active file, we can get it without opening new files
+		return d.Get(vp.valuepos, vp.valuesz)
+	} else {
+		// This key is in other files, need to open and read it
+		// TODO: cover test for this
+		rd := ReadonlyDatafile{d.folder, vp.fid}
+		return rd.Get(vp.valuepos, vp.valuesz)
+	}
 }

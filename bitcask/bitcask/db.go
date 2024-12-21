@@ -29,8 +29,9 @@ func (db Database) HandleQuery(query string) {
 }
 
 type Database struct {
-	keydir Keydir
-	folder string
+	activeDatafile ActiveDatafile
+	keydir         Keydir
+	folder         string
 }
 
 func OpenDatabase(folder string) (db Database, err error) {
@@ -38,14 +39,23 @@ func OpenDatabase(folder string) (db Database, err error) {
 	if err != nil {
 		return db, err
 	}
-	return Database{OpenKeydir(&folder), folder}, nil
+
+	// TODO: to not assign id = 1
+	d, err := OpenAsActiveDatafile(&folder, 1)
+	if err != nil {
+		return db, err
+	}
+
+	kd := OpenKeydir()
+
+	return Database{d, kd, folder}, nil
 }
 
 func (db Database) Set(cmd Command) error {
 	if cmd.cmdType != SetCommand {
 		panic("Expected set command")
 	}
-	err := db.keydir.Save(cmd.key, cmd.value, 1)
+	err := db.keydir.Save(db.activeDatafile, cmd.key, cmd.value)
 	return err
 }
 
@@ -53,6 +63,6 @@ func (db Database) Get(cmd Command) (value string, err error) {
 	if cmd.cmdType != GetCommand {
 		panic("Expected get command")
 	}
-	record, err := db.keydir.Get(cmd.key)
+	record, err := db.keydir.Get(db.activeDatafile, cmd.key)
 	return string(record.value), err
 }

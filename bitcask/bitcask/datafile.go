@@ -20,7 +20,7 @@ type ActiveDatafile struct {
 	id     uint16
 }
 
-func (d ReadonlyDatafile) Active() (*ActiveDatafile, error) {
+func (d ReadonlyDatafile) Active() (ActiveDatafile, error) {
 	return OpenAsActiveDatafile(d.folder, d.id)
 }
 
@@ -37,12 +37,12 @@ func (d *ActiveDatafile) Readonly() ReadonlyDatafile {
 	return ReadonlyDatafile{d.folder, d.id}
 }
 
-func OpenAsActiveDatafile(folder *string, id uint16) (*ActiveDatafile, error) {
+func OpenAsActiveDatafile(folder *string, id uint16) (d ActiveDatafile, err error) {
 	f, err := os.OpenFile(filepath(*folder, id), os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
-		return nil, err
+		return d, err
 	}
-	return &ActiveDatafile{f, folder, id}, nil
+	return ActiveDatafile{f, folder, id}, nil
 }
 
 func (d ActiveDatafile) Get(pos uint32, sz uint32) (r Record, err error) {
