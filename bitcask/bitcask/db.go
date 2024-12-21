@@ -71,16 +71,14 @@ func (db *Database) Set(cmd Command) error {
 		db.rollover()
 	}
 
-	pos := db.activeDatafile.sz
-
 	// first, save to active file
-	r, err := db.activeDatafile.Save(cmd.key, cmd.value)
+	loc, err := db.activeDatafile.Save(cmd.key, cmd.value)
 	if err != nil {
 		return err
 	}
 
 	// then save to keydir
-	db.keydir[cmd.key] = ValuePos{db.activeDatafile.id, r.size(), pos, r.tstamp}
+	db.keydir[cmd.key] = loc
 
 	return nil
 }
@@ -91,21 +89,21 @@ func (db Database) Get(cmd Command) (value string, err error) {
 	}
 
 	// get the key's position from keydir
-	vp, ok := db.keydir[cmd.key]
+	loc, ok := db.keydir[cmd.key]
 	if !ok {
 		return value, fmt.Errorf("Not existed key %s", cmd.key)
 	}
 
 	var record Record
 
-	if db.activeDatafile.id == vp.fid {
+	if db.activeDatafile.id == loc.datafileId {
 		// This key is in active file, we can get it without opening new files
-		record, err = db.activeDatafile.Get(vp.valuepos, vp.valuesz)
+		record, err = db.activeDatafile.Get(loc)
 	} else {
 		// This key is in other files, need to open and read it
 		// TODO: cover test for this
-		rd := ReadonlyDatafile{&db.folder, vp.fid}
-		record, err = rd.Get(vp.valuepos, vp.valuesz)
+		rd := ReadonlyDatafile{&db.folder, loc.datafileId}
+		record, err = rd.Get(loc)
 	}
 
 	return string(record.value), err

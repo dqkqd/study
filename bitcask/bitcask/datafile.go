@@ -22,12 +22,12 @@ func (d ReadonlyDatafile) Active() (ActiveDatafile, error) {
 	return OpenAsActiveDatafile(d.folder, d.id)
 }
 
-func (d ReadonlyDatafile) Get(pos uint32, sz uint32) (r Record, err error) {
+func (d ReadonlyDatafile) Get(loc RecordLoc) (r Record, err error) {
 	f, err := os.Open(DatafilePath(*d.folder, d.id))
 	if err != nil {
 		return r, err
 	}
-	return getRecord(f, pos, sz)
+	return getRecord(f, loc)
 }
 
 func (d *ActiveDatafile) Readonly() ReadonlyDatafile {
@@ -47,24 +47,29 @@ func OpenAsActiveDatafile(folder *string, id uint16) (d ActiveDatafile, err erro
 	return ActiveDatafile{f, folder, id, uint32(sz)}, nil
 }
 
-func (d ActiveDatafile) Get(pos uint32, sz uint32) (r Record, err error) {
-	return getRecord(d.f, pos, sz)
+func (d ActiveDatafile) Get(loc RecordLoc) (r Record, err error) {
+	return getRecord(d.f, loc)
 }
 
-func (d *ActiveDatafile) Save(k string, v string) (r Record, err error) {
-	r, err = saveRecord(d.f, k, v)
+func (d *ActiveDatafile) Save(k string, v string) (loc RecordLoc, err error) {
+	r, err := saveRecord(d.f, k, v)
+	if err != nil {
+		return loc, err
+	}
+
+	loc = RecordLoc{d.id, r.size(), d.sz, r.tstamp}
 	d.sz += r.size()
-	return
+	return loc, nil
 }
 
-func getRecord(f *os.File, pos uint32, sz uint32) (r Record, err error) {
-	buf := make([]byte, sz)
-	n, err := f.ReadAt(buf, int64(pos))
+func getRecord(f *os.File, loc RecordLoc) (r Record, err error) {
+	buf := make([]byte, loc.sz)
+	n, err := f.ReadAt(buf, int64(loc.pos))
 	if err != nil {
 		return r, err
 	}
-	if n != int(sz) {
-		return r, fmt.Errorf("Cannot read record of size %d", sz)
+	if n != int(loc.sz) {
+		return r, fmt.Errorf("Cannot read record of size %d", loc.sz)
 	}
 
 	return RecordFromBytes(buf), nil

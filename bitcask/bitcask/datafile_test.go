@@ -22,24 +22,22 @@ func TestDatafileGetRecords(t *testing.T) {
 		{"this is a long key", "this is a long value"},
 	}
 
-	positions := make([]uint32, len(testcases))
-	sizes := make([]uint32, len(testcases))
+	locs := make([]RecordLoc, len(testcases))
 
 	// save
 	for i, tc := range testcases {
-		positions[i] = d.sz
-		r, err := d.Save(tc.key, tc.value)
+		loc, err := d.Save(tc.key, tc.value)
 		if err != nil {
 			t.Errorf("Cannot save record: %s", err)
 		}
-		sizes[i] = r.size()
+		locs[i] = loc
 	}
 
 	// get
 	for i, tc := range testcases {
-		record, err := d.Get(positions[i], sizes[i])
+		record, err := d.Get(locs[i])
 		if err != nil {
-			t.Errorf("Cannot get record at pos=%d", positions[i])
+			t.Errorf("Cannot get record at pos=%d", locs[i].pos)
 		}
 		if string(record.key) != tc.key {
 			t.Errorf("Got %s, want %s", record.key, tc.key)
@@ -52,9 +50,9 @@ func TestDatafileGetRecords(t *testing.T) {
 	// get as read only
 	rdf := d.Readonly()
 	for i, tc := range testcases {
-		record, err := rdf.Get(positions[i], sizes[i])
+		record, err := rdf.Get(locs[i])
 		if err != nil {
-			t.Errorf("Cannot get record at pos=%d", positions[i])
+			t.Errorf("Cannot get record at pos=%d", locs[i].pos)
 		}
 		if string(record.key) != tc.key {
 			t.Errorf("Got %s, want %s", record.key, tc.key)
