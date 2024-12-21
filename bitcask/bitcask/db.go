@@ -71,15 +71,16 @@ func (db *Database) Set(cmd Command) error {
 		db.rollover()
 	}
 
+	pos := db.activeDatafile.sz
+
 	// first, save to active file
-	pos, sz, err := db.activeDatafile.Save(cmd.key, cmd.value)
+	r, err := db.activeDatafile.Save(cmd.key, cmd.value)
 	if err != nil {
 		return err
 	}
 
 	// then save to keydir
-	// TODO: handle tstamp
-	db.keydir[cmd.key] = ValuePos{db.activeDatafile.id, sz, pos, 0}
+	db.keydir[cmd.key] = ValuePos{db.activeDatafile.id, r.size(), pos, r.tstamp}
 
 	return nil
 }

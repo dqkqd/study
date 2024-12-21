@@ -51,16 +51,10 @@ func (d ActiveDatafile) Get(pos uint32, sz uint32) (r Record, err error) {
 	return getRecord(d.f, pos, sz)
 }
 
-func (d *ActiveDatafile) Save(k string, v string) (pos uint32, sz uint32, err error) {
-	recordsz, err := saveRecord(d.f, k, v)
-	if err != nil {
-		return pos, sz, err
-	}
-
-	pos = d.sz
-	d.sz += uint32(recordsz)
-
-	return pos, uint32(recordsz), nil
+func (d *ActiveDatafile) Save(k string, v string) (r Record, err error) {
+	r, err = saveRecord(d.f, k, v)
+	d.sz += r.size()
+	return
 }
 
 func getRecord(f *os.File, pos uint32, sz uint32) (r Record, err error) {
@@ -76,11 +70,11 @@ func getRecord(f *os.File, pos uint32, sz uint32) (r Record, err error) {
 	return RecordFromBytes(buf), nil
 }
 
-func saveRecord(f *os.File, k, v string) (sz int, err error) {
-	r := NewRecord(k, v)
+func saveRecord(f *os.File, k, v string) (r Record, err error) {
+	r = NewRecord(k, v)
 	buf, err := r.Bytes()
 	if err != nil {
-		return sz, err
+		return r, err
 	}
 
 	n, err := f.Write(buf)
@@ -88,14 +82,14 @@ func saveRecord(f *os.File, k, v string) (sz int, err error) {
 	if err != nil {
 		p, err := f.Seek(0, io.SeekCurrent)
 		if err != nil {
-			return 0, err
+			return r, err
 		}
 
 		err = f.Truncate(p - int64(n))
 		if err != nil {
-			return 0, err
+			return r, err
 		}
 	}
 
-	return n, nil
+	return r, nil
 }

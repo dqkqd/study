@@ -6,7 +6,7 @@ import (
 
 func TestDatafileGetRecords(t *testing.T) {
 	dir := t.TempDir()
-	df, err := OpenAsActiveDatafile(&dir, 1)
+	d, err := OpenAsActiveDatafile(&dir, 1)
 	if err != nil {
 		t.Fail()
 	}
@@ -27,17 +27,17 @@ func TestDatafileGetRecords(t *testing.T) {
 
 	// save
 	for i, tc := range testcases {
-		pos, sz, err := df.Save(tc.key, tc.value)
+		positions[i] = d.sz
+		r, err := d.Save(tc.key, tc.value)
 		if err != nil {
 			t.Errorf("Cannot save record: %s", err)
 		}
-		positions[i] = pos
-		sizes[i] = sz
+		sizes[i] = r.size()
 	}
 
 	// get
 	for i, tc := range testcases {
-		record, err := df.Get(positions[i], sizes[i])
+		record, err := d.Get(positions[i], sizes[i])
 		if err != nil {
 			t.Errorf("Cannot get record at pos=%d", positions[i])
 		}
@@ -50,7 +50,7 @@ func TestDatafileGetRecords(t *testing.T) {
 	}
 
 	// get as read only
-	rdf := df.Readonly()
+	rdf := d.Readonly()
 	for i, tc := range testcases {
 		record, err := rdf.Get(positions[i], sizes[i])
 		if err != nil {
