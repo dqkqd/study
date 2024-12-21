@@ -18,6 +18,7 @@ type ActiveDatafile struct {
 	f      *os.File // always hold file pointer for reading and writing
 	folder *string
 	id     uint16
+	sz     uint32 // file size to determine if it exceeds threshold
 }
 
 func (d ReadonlyDatafile) Active() (ActiveDatafile, error) {
@@ -42,15 +43,27 @@ func OpenAsActiveDatafile(folder *string, id uint16) (d ActiveDatafile, err erro
 	if err != nil {
 		return d, err
 	}
-	return ActiveDatafile{f, folder, id}, nil
+	sz, err := f.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return d, err
+	}
+	return ActiveDatafile{f, folder, id, uint32(sz)}, nil
 }
 
 func (d ActiveDatafile) Get(pos uint32, sz uint32) (r Record, err error) {
 	return getRecord(d.f, pos, sz)
 }
 
-func (d ActiveDatafile) Save(k string, v string) (pos uint32, sz uint32, err error) {
-	return saveRecord(d.f, k, v)
+func (d *ActiveDatafile) Save(k string, v string) (pos uint32, sz uint32, err error) {
+	recordsz, err := saveRecord(d.f, k, v)
+	if err != nil {
+		return pos, sz, err
+	}
+
+	pos = d.sz
+	d.sz += uint32(recordsz)
+
+	return pos, uint32(recordsz), nil
 }
 
 func filepath(folder string, id uint16) string {
@@ -70,20 +83,26 @@ func getRecord(f *os.File, pos uint32, sz uint32) (r Record, err error) {
 	return RecordFromBytes(buf), nil
 }
 
-func saveRecord(f *os.File, k, v string) (pos, sz uint32, err error) {
+func saveRecord(f *os.File, k, v string) (sz int, err error) {
 	r := NewRecord(k, v)
 	buf, err := r.Bytes()
 	if err != nil {
-		return pos, sz, err
+		return sz, err
 	}
 
-	// Get file position before writing
-	p, err := f.Seek(0, io.SeekEnd)
-	pos = uint32(p)
+	n, err := f.Write(buf)
+	// truncate the file in case of errror
 	if err != nil {
-		return pos, sz, err
+		p, err := f.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return 0, err
+		}
+
+		err = f.Truncate(p - int64(n))
+		if err != nil {
+			return 0, err
+		}
 	}
 
-	_, err = f.Write(buf)
-	return pos, r.size(), err
+	return n, nil
 }
