@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func checkSetKey(t *testing.T, db Database, key string, value string) {
+func checkSetKey(t *testing.T, db *Database, key string, value string) {
 	cmd := Command{key, value, SetCommand}
 	err := db.Set(cmd)
 	if err != nil {
@@ -14,7 +14,7 @@ func checkSetKey(t *testing.T, db Database, key string, value string) {
 	}
 }
 
-func checkGetKey(t *testing.T, db Database, key string, expected string) {
+func checkGetKey(t *testing.T, db *Database, key string, expected string) {
 	value, err := db.Get(Command{key: key, cmdType: GetCommand})
 	if err != nil {
 		t.Error(err)
@@ -108,16 +108,19 @@ func TestDbRollover(t *testing.T) {
 	}
 
 	shouldHaveTotalFiles(1)
-
 	checkSetKey(t, db, "key1", "value1")
-
 	shouldHaveTotalFiles(1)
-
 	checkSetKey(t, db, "key2", "value2")
-
 	shouldHaveTotalFiles(2)
+	checkSetKey(t, db, "key3", "value3")
+	shouldHaveTotalFiles(3)
+	checkSetKey(t, db, "key4", "value4")
+	shouldHaveTotalFiles(4)
 
 	// should be able to get rolled over values
 	checkGetKey(t, db, "key1", "value1")
 	checkGetKey(t, db, "key2", "value2")
+	checkGetKey(t, db, "key3", "value3")
+	checkGetKey(t, db, "key4", "value4")
 }
+

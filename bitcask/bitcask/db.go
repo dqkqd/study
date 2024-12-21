@@ -33,7 +33,7 @@ type Config struct {
 }
 
 type Database struct {
-	activeDatafile *ActiveDatafile
+	activeDatafile ActiveDatafile
 	keydir         Keydir
 	folder         string
 	cfg            Config
@@ -45,7 +45,7 @@ func DefaultDatabaseConfig() Config {
 	}
 }
 
-func OpenDatabase(folder string, cfg Config) (db Database, err error) {
+func OpenDatabase(folder string, cfg Config) (db *Database, err error) {
 	err = os.MkdirAll(folder, 0700)
 	if err != nil {
 		return db, err
@@ -59,10 +59,10 @@ func OpenDatabase(folder string, cfg Config) (db Database, err error) {
 
 	kd := OpenKeydir()
 
-	return Database{&d, kd, folder, cfg}, nil
+	return &Database{d, kd, folder, cfg}, nil
 }
 
-func (db Database) Set(cmd Command) error {
+func (db *Database) Set(cmd Command) error {
 	if cmd.cmdType != SetCommand {
 		panic("Expected set command")
 	}
@@ -114,12 +114,12 @@ func (db Database) shouldRollover() bool {
 	return db.activeDatafile.sz >= db.cfg.DatafileThreshold
 }
 
-func (db Database) rollover() error {
+func (db *Database) rollover() error {
 	nextId := db.activeDatafile.id + 1
 	d, err := OpenAsActiveDatafile(&db.folder, nextId)
 	if err != nil {
 		return err
 	}
-	db.activeDatafile = &d
+	db.activeDatafile = d
 	return nil
 }
