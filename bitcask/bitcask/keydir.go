@@ -22,7 +22,7 @@ func OpenKeydir(folder *string) Keydir {
 }
 
 func (k Keydir) Save(key, value string, fid uint16) error {
-	df := Datafile{k.folder, fid}
+	df := ActiveDatafile{k.folder, fid}
 	pos, sz, err := df.Save(key, value)
 	if err != nil {
 		return err
@@ -38,6 +38,6 @@ func (k Keydir) Get(key string) (r Record, err error) {
 	if !ok {
 		return r, fmt.Errorf("Cannot get datafile for key %s", key)
 	}
-	df := Datafile{k.folder, vp.fid}
+	df := ReadonlyDatafile{k.folder, vp.fid}
 	return df.Get(vp.valuepos, vp.valuesz)
 }
