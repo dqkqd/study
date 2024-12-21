@@ -6,6 +6,24 @@ import (
 	"testing"
 )
 
+func checkSetKey(t *testing.T, db Database, key string, value string) {
+	cmd := Command{key, value, SetCommand}
+	err := db.Set(cmd)
+	if err != nil {
+		t.Errorf("Cannot set %s, error: %s", cmd, err)
+	}
+}
+
+func checkGetKey(t *testing.T, db Database, key string, expected string) {
+	value, err := db.Get(Command{key: key, cmdType: GetCommand})
+	if err != nil {
+		t.Error(err)
+	}
+	if value != expected {
+		t.Errorf("Got %s, want `%s`", value, expected)
+	}
+}
+
 func TestDbQuery(t *testing.T) {
 	dir := t.TempDir()
 	dbfolder := fmt.Sprintf("%s/%s", dir, "testdb")
@@ -14,28 +32,14 @@ func TestDbQuery(t *testing.T) {
 		t.Error(err)
 	}
 
-	var cmd Command
-
-	cmd = Command{key: "1", cmdType: GetCommand}
+	cmd := Command{key: "1", cmdType: GetCommand}
 	_, err = db.Get(cmd)
 	if err == nil {
 		t.Errorf("cmd %s must fail", cmd)
 	}
 
-	cmd = Command{key: "1", value: "2", cmdType: SetCommand}
-	err = db.Set(cmd)
-	if err != nil {
-		t.Errorf("Cannot set %s, error: %s", cmd, err)
-	}
-
-	cmd = Command{key: "1", cmdType: GetCommand}
-	v, err := db.Get(cmd)
-	if err != nil {
-		t.Errorf("Cannot get %s, error: %s", cmd, err)
-	}
-	if v != "2" {
-		t.Errorf("Got %s, want 2", v)
-	}
+	checkSetKey(t, db, "1", "2")
+	checkGetKey(t, db, "1", "2")
 }
 
 func TestDbGet(t *testing.T) {
@@ -46,30 +50,23 @@ func TestDbGet(t *testing.T) {
 		t.Error(err)
 	}
 
-	testcases := []Command{
-		{"key1", "value1", SetCommand},
-		{"key2", "value2", SetCommand},
-		{"key3", "value3", SetCommand},
-		{"key4", "value4", SetCommand},
-		{"key5", "value5", SetCommand},
-		{"this is a long key", "this is a long value", SetCommand},
+	testcases := []struct {
+		key, value string
+	}{
+		{"key1", "value1"},
+		{"key2", "value2"},
+		{"key3", "value3"},
+		{"key4", "value4"},
+		{"key5", "value5"},
+		{"this is a long key", "this is a long value"},
 	}
 
 	for _, tc := range testcases {
-		err := db.Set(tc)
-		if err != nil {
-			t.Errorf("Cannot save record: %s", err)
-		}
+		checkSetKey(t, db, tc.key, tc.value)
 	}
 
 	for _, tc := range testcases {
-		value, err := db.Get(Command{key: tc.key, cmdType: GetCommand})
-		if err != nil {
-			t.Errorf("Cannot get key %s, error: %s", tc.key, err)
-		}
-		if value != tc.value {
-			t.Errorf("Got %s, want %s", value, tc.value)
-		}
+		checkGetKey(t, db, tc.key, tc.value)
 	}
 }
 
@@ -81,31 +78,11 @@ func TestDbGetOverwrite(t *testing.T) {
 		t.Error(err)
 	}
 
-	err = db.Set(Command{"key", "value", SetCommand})
-	if err != nil {
-		t.Error(err)
-	}
+	checkSetKey(t, db, "key", "value")
+	checkGetKey(t, db, "key", "value")
 
-	value, err := db.Get(Command{key: "key", cmdType: GetCommand})
-	if err != nil {
-		t.Error(err)
-	}
-	if value != "value" {
-		t.Errorf("Got %s, want `value`", value)
-	}
-
-	err = db.Set(Command{"key", "new value", SetCommand})
-	if err != nil {
-		t.Error(err)
-	}
-
-	value, err = db.Get(Command{key: "key", cmdType: GetCommand})
-	if err != nil {
-		t.Error(err)
-	}
-	if value != "new value" {
-		t.Errorf("Got %s, want `new value`", value)
-	}
+	checkSetKey(t, db, "key", "new value")
+	checkGetKey(t, db, "key", "new value")
 }
 
 func TestDbRollover(t *testing.T) {
@@ -132,34 +109,15 @@ func TestDbRollover(t *testing.T) {
 
 	shouldHaveTotalFiles(1)
 
-	err = db.Set(Command{"key1", "value1", SetCommand})
-	if err != nil {
-		t.Error(err)
-	}
+	checkSetKey(t, db, "key1", "value1")
 
 	shouldHaveTotalFiles(1)
 
-	err = db.Set(Command{"key2", "value2", SetCommand})
-	if err != nil {
-		t.Error(err)
-	}
+	checkSetKey(t, db, "key2", "value2")
 
 	shouldHaveTotalFiles(2)
 
 	// should be able to get rolled over values
-	value, err := db.Get(Command{key: "key1", cmdType: GetCommand})
-	if err != nil {
-		t.Error(err)
-	}
-	if value != "value1" {
-		t.Errorf("Got %s, want `value1`", value)
-	}
-
-	value, err = db.Get(Command{key: "key2", cmdType: GetCommand})
-	if err != nil {
-		t.Error(err)
-	}
-	if value != "value2" {
-		t.Errorf("Got %s, want `value2`", value)
-	}
+	checkGetKey(t, db, "key1", "value1")
+	checkGetKey(t, db, "key2", "value2")
 }
