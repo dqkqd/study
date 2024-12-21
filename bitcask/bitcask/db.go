@@ -2,6 +2,7 @@ package bitcask
 
 import (
 	"fmt"
+	"os"
 )
 
 func (db Database) HandleQuery(query string) {
@@ -27,32 +28,31 @@ func (db Database) HandleQuery(query string) {
 	}
 }
 
-type InMemoryStorage map[string]string
-
 type Database struct {
-	mem InMemoryStorage
+	keydir Keydir
+	folder string
 }
 
-func NewDatabase() Database {
-	return Database{InMemoryStorage{}}
+func OpenDatabase(folder string) (db Database, err error) {
+	err = os.MkdirAll(folder, 0700)
+	if err != nil {
+		return db, err
+	}
+	return Database{OpenKeydir(&folder), folder}, nil
 }
 
 func (db Database) Set(cmd Command) error {
 	if cmd.cmdType != SetCommand {
 		panic("Expected set command")
 	}
-	db.mem[cmd.key] = cmd.value
-	return nil
+	err := db.keydir.Save(cmd.key, cmd.value, 1)
+	return err
 }
 
 func (db Database) Get(cmd Command) (value string, err error) {
 	if cmd.cmdType != GetCommand {
 		panic("Expected get command")
 	}
-	value, ok := db.mem[cmd.key]
-	if ok {
-		return value, nil
-	}
-	// TODO: get from disk
-	return value, fmt.Errorf("Key `%s` not existed", cmd.key)
+	record, err := db.keydir.Get(cmd.key)
+	return string(record.value), err
 }

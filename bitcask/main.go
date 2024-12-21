@@ -11,7 +11,10 @@ import (
 
 func main() {
 	reader := bufio.NewReader(os.Stdin)
-	db := bitcask.NewDatabase()
+	db, err := bitcask.OpenDatabase("dbfiles")
+	if err != nil {
+		panic("Cannot open database")
+	}
 
 	for {
 		fmt.Print(">>> ")
