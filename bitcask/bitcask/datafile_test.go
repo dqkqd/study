@@ -20,19 +20,21 @@ func TestDatafileGetRecords(t *testing.T) {
 	}
 
 	positions := make([]uint32, len(testcases))
+	sizes := make([]uint32, len(testcases))
 
 	// save
 	for i, tc := range testcases {
-		pos, err := df.Save(tc.key, tc.value)
+		pos, sz, err := df.Save(tc.key, tc.value)
 		if err != nil {
 			t.Errorf("Cannot save record: %s", err)
 		}
 		positions[i] = pos
+		sizes[i] = sz
 	}
 
 	// get
 	for i, tc := range testcases {
-		record, err := df.Get(positions[i])
+		record, err := df.Get(positions[i], sizes[i])
 		if err != nil {
 			t.Errorf("Cannot get record at pos=%d", positions[i])
 		}
