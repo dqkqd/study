@@ -7,23 +7,23 @@ import (
 )
 
 type ReadonlyDatafile struct {
-	folder *string
-	id     uint16
+	dir *Directory
+	id  uint16
 }
 
 type ActiveDatafile struct {
-	f      *os.File // always hold file pointer for reading and writing
-	folder *string
-	id     uint16
-	sz     uint32 // file size to determine if it exceeds threshold
+	f   *os.File // always hold file pointer for reading and writing
+	dir *Directory
+	id  uint16
+	sz  uint32 // file size to determine if it exceeds threshold
 }
 
 func (d ReadonlyDatafile) Active() (ActiveDatafile, error) {
-	return OpenAsActiveDatafile(d.folder, d.id)
+	return openAsActiveDatafile(d.dir, d.id)
 }
 
 func (d ReadonlyDatafile) Get(loc RecordLoc) (r Record, err error) {
-	f, err := os.Open(DatafilePath(*d.folder, d.id))
+	f, err := os.Open(d.dir.DatafilePath(loc.datafileId))
 	if err != nil {
 		return r, err
 	}
@@ -32,11 +32,11 @@ func (d ReadonlyDatafile) Get(loc RecordLoc) (r Record, err error) {
 
 func (d *ActiveDatafile) Readonly() ReadonlyDatafile {
 	defer func() { d = nil }()
-	return ReadonlyDatafile{d.folder, d.id}
+	return ReadonlyDatafile{d.dir, d.id}
 }
 
-func OpenAsActiveDatafile(folder *string, id uint16) (d ActiveDatafile, err error) {
-	f, err := os.OpenFile(DatafilePath(*folder, id), os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
+func openAsActiveDatafile(dir *Directory, id uint16) (d ActiveDatafile, err error) {
+	f, err := os.OpenFile(dir.DatafilePath(id), os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
 		return d, err
 	}
@@ -44,7 +44,7 @@ func OpenAsActiveDatafile(folder *string, id uint16) (d ActiveDatafile, err erro
 	if err != nil {
 		return d, err
 	}
-	return ActiveDatafile{f, folder, id, uint32(sz)}, nil
+	return ActiveDatafile{f, dir, id, uint32(sz)}, nil
 }
 
 func (d ActiveDatafile) Get(loc RecordLoc) (r Record, err error) {

@@ -2,12 +2,23 @@ package bitcask
 
 import (
 	"fmt"
-	"path"
+	"os"
+	"path/filepath"
 )
 
-const DATA_FILE_EXT = "df"
+const DATAFILE_PREFIX = "DATAFILE"
 
-func DatafilePath(folder string, id uint16) string {
-	return path.Join(fmt.Sprintf("%s/%d.%s", folder, id, DATA_FILE_EXT))
+type Directory struct {
+	folder string
+}
+
+func openDirectory(folder string) (dir Directory, err error) {
+	dir.folder = folder
+	err = os.MkdirAll(folder, 0700)
+	return dir, err
+}
+
+func (dir Directory) DatafilePath(id uint16) string {
+	return filepath.Join(fmt.Sprintf("%s/%s_%010d", dir.folder, DATAFILE_PREFIX, id))
 }
 

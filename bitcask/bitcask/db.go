@@ -2,7 +2,6 @@ package bitcask
 
 import (
 	"fmt"
-	"os"
 )
 
 func (db Database) HandleQuery(query string) {
@@ -33,6 +32,7 @@ type Config struct {
 }
 
 type Database struct {
+	dir            *Directory
 	activeDatafile ActiveDatafile
 	keydir         Keydir
 	folder         string
@@ -46,20 +46,20 @@ func DefaultDatabaseConfig() Config {
 }
 
 func OpenDatabase(folder string, cfg Config) (db *Database, err error) {
-	err = os.MkdirAll(folder, 0700)
+	dir, err := openDirectory(folder)
 	if err != nil {
 		return db, err
 	}
 
 	// TODO: to not assign id = 1
-	d, err := OpenAsActiveDatafile(&folder, 1)
+	d, err := openAsActiveDatafile(&dir, 1)
 	if err != nil {
 		return db, err
 	}
 
 	kd := OpenKeydir()
 
-	return &Database{d, kd, folder, cfg}, nil
+	return &Database{&dir, d, kd, folder, cfg}, nil
 }
 
 func (db *Database) Set(cmd Command) error {
@@ -102,7 +102,7 @@ func (db Database) Get(cmd Command) (value string, err error) {
 	} else {
 		// This key is in other files, need to open and read it
 		// TODO: cover test for this
-		rd := ReadonlyDatafile{&db.folder, loc.datafileId}
+		rd := ReadonlyDatafile{db.dir, loc.datafileId}
 		record, err = rd.Get(loc)
 	}
 
@@ -115,7 +115,7 @@ func (db Database) shouldRollover() bool {
 
 func (db *Database) rollover() error {
 	nextId := db.activeDatafile.id + 1
-	d, err := OpenAsActiveDatafile(&db.folder, nextId)
+	d, err := openAsActiveDatafile(db.dir, nextId)
 	if err != nil {
 		return err
 	}

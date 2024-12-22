@@ -5,8 +5,8 @@ import (
 )
 
 func TestDatafileGetRecords(t *testing.T) {
-	dir := t.TempDir()
-	d, err := OpenAsActiveDatafile(&dir, 1)
+	dir := Directory{t.TempDir()}
+	d, err := openAsActiveDatafile(&dir, 1)
 	if err != nil {
 		t.Fail()
 	}
