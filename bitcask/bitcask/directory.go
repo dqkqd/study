@@ -11,8 +11,6 @@ import (
 
 const DATAFILE_PREFIX = "DATAFILE"
 
-type DatafileId uint64
-
 type Directory struct {
 	readonlyDatafileIds map[DatafileId]bool
 	folder              string
@@ -56,7 +54,7 @@ func (dir Directory) readonlyDatafile(id DatafileId) (d ReadonlyDatafile, error 
 		return d, fmt.Errorf("Non existed readonly datafile id %d", id)
 	}
 	f, err := os.Open(datafilePath(dir.folder, id))
-	return ReadonlyDatafile{f}, err
+	return ReadonlyDatafile{f, id}, err
 }
 
 func (dir Directory) activeDatafile() (d ActiveDatafile, err error) {

@@ -147,12 +147,26 @@ func TestDbReopen(t *testing.T) {
 	}
 
 	{
-		// re-open, still get the same key
+		// re-open, still get the same keys
 		db, err := OpenDatabase(dbfolder, cfg)
 		if err != nil {
 			t.Error(err)
 		}
 		checkGetKey(t, db, "key1", "value1")
+		checkGetKey(t, db, "key2", "value2")
+		checkGetKey(t, db, "key3", "value3")
+		checkGetKey(t, db, "key4", "value4")
+		// set new keys
+		checkSetKey(t, db, "key1", "new value1")
+	}
+
+	{
+		// re-open, can get the same keys and new key
+		db, err := OpenDatabase(dbfolder, cfg)
+		if err != nil {
+			t.Error(err)
+		}
+		checkGetKey(t, db, "key1", "new value1")
 		checkGetKey(t, db, "key2", "value2")
 		checkGetKey(t, db, "key3", "value3")
 		checkGetKey(t, db, "key4", "value4")

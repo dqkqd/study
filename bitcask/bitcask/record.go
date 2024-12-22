@@ -2,6 +2,7 @@ package bitcask
 
 import (
 	"encoding/binary"
+	"sort"
 	"time"
 )
 
@@ -14,18 +15,6 @@ type Record struct {
 	tstamp  uint64
 	keysz   uint32
 	valuesz uint32
-}
-
-type RecordLoc struct {
-	datafileId DatafileId
-	sz         uint32
-	pos        uint32
-	tstamp     uint64
-}
-
-type RecordAndPos struct {
-	r   Record
-	pos uint32
 }
 
 func NewRecord(k, v string) (r Record) {
@@ -44,6 +33,19 @@ func NewRecord(k, v string) (r Record) {
 
 func (r Record) size() uint32 {
 	return RECORD_HEADER_SIZE + r.keysz + r.valuesz
+}
+
+func (r Record) less(o Record) bool {
+	rkey := string(r.key)
+	okey := string(o.key)
+	if rkey == okey {
+		return r.older(o)
+	}
+	return rkey < okey
+}
+
+func (r Record) older(o Record) bool {
+	return r.tstamp < o.tstamp
 }
 
 func (r Record) Bytes() (b []byte, err error) {
@@ -84,4 +86,40 @@ func RecordFromBytes(b []byte) (r Record) {
 	r.key = b[RECORD_HEADER_SIZE : RECORD_HEADER_SIZE+r.keysz]
 	r.value = b[RECORD_HEADER_SIZE+r.keysz:]
 	return
+}
+
+type RecordLoc struct {
+	datafileId DatafileId
+	sz         uint32
+	pos        uint32
+	tstamp     uint64
+}
+
+type RecordWithLoc struct {
+	r   Record
+	loc RecordLoc
+}
+
+type RecordsWithLoc []RecordWithLoc
+
+func (records RecordsWithLoc) unique() RecordsWithLoc {
+	uniqueRecordsMap := map[string]RecordWithLoc{}
+	for _, rl := range records {
+		key := string(rl.r.key)
+		existedRecord, existed := uniqueRecordsMap[key]
+		if !existed || existedRecord.r.older(rl.r) {
+			uniqueRecordsMap[key] = rl
+		}
+	}
+
+	// convert to array and sort
+	uniqueRecords := RecordsWithLoc{}
+	for _, r := range uniqueRecordsMap {
+		uniqueRecords = append(uniqueRecords, r)
+	}
+	sort.SliceStable(uniqueRecords, func(i, j int) bool {
+		return uniqueRecords[i].r.less(uniqueRecords[j].r)
+	})
+
+	return uniqueRecords
 }

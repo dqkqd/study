@@ -7,22 +7,35 @@ import (
 	"os"
 )
 
+type DatafileId uint64
+
+const INVALID_DATAFILE_ID DatafileId = 0
+
 type ReadonlyDatafile struct {
-	f *os.File
+	f  *os.File
+	id DatafileId
 }
 
 type ActiveDatafile struct {
 	f  *os.File
-	id DatafileId // need to know id to tell caller when saving record
-	sz uint32     // file size to determine if it exceeds threshold
+	id DatafileId
+	sz uint32 // file size to determine if it exceeds threshold
 }
 
 func (d ReadonlyDatafile) Get(loc RecordLoc) (r Record, err error) {
 	return getRecord(d.f, loc)
 }
 
-func (d ReadonlyDatafile) GetAllRecords() (map[string]RecordAndPos, error) {
-	return getAllRecords(d.f)
+func (d ReadonlyDatafile) GetAllRecords() (records RecordsWithLoc, err error) {
+	records, err = getAllRecords(d.f)
+	if err != nil {
+		return records, err
+	}
+	// set correct position
+	for i := range records {
+		records[i].loc.datafileId = d.id
+	}
+	return records.unique(), nil
 }
 
 func (d ActiveDatafile) Get(loc RecordLoc) (r Record, err error) {
@@ -77,13 +90,14 @@ func saveRecord(f *os.File, k, v string) (r Record, err error) {
 	return r, nil
 }
 
-func getAllRecords(f *os.File) (map[string]RecordAndPos, error) {
+func getAllRecords(f *os.File) (RecordsWithLoc, error) {
 	_, err := f.Seek(0, io.SeekStart)
 	if err != nil {
 		return nil, err
 	}
 
-	recordAndLocs := map[string]RecordAndPos{}
+	records := RecordsWithLoc{}
+
 	pos := uint32(0)
 	for {
 		buf := make([]byte, RECORD_HEADER_SIZE)
@@ -101,14 +115,11 @@ func getAllRecords(f *os.File) (map[string]RecordAndPos, error) {
 		}
 
 		r := RecordFromBytes(buf)
-		oldr, existed := recordAndLocs[string(r.key)]
-
-		if !existed || r.tstamp > oldr.r.tstamp {
-			recordAndLocs[string(r.key)] = RecordAndPos{r, pos}
-		}
+		loc := RecordLoc{INVALID_DATAFILE_ID, r.size(), pos, r.tstamp}
+		records = append(records, RecordWithLoc{r, loc})
 
 		pos += r.size()
 	}
 
-	return recordAndLocs, nil
+	return records, nil
 }
