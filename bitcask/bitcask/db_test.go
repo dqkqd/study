@@ -24,6 +24,16 @@ func checkGetKey(t *testing.T, db *Database, key string, expected string) {
 	}
 }
 
+func shouldHaveTotalFiles(t *testing.T, folder string, expected int) {
+	files, err := os.ReadDir(folder)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(files) != expected {
+		t.Errorf("Expect %d files, has %d", expected, len(files))
+	}
+}
+
 func TestDbQuery(t *testing.T) {
 	dir := t.TempDir()
 	dbfolder := fmt.Sprintf("%s/%s", dir, "testdb")
@@ -97,25 +107,15 @@ func TestDbRollover(t *testing.T) {
 		t.Error(err)
 	}
 
-	shouldHaveTotalFiles := func(expected int) {
-		files, err := os.ReadDir(dbfolder)
-		if err != nil {
-			t.Error(err)
-		}
-		if len(files) != expected {
-			t.Errorf("Expect %d datafile, has %d", expected, len(files))
-		}
-	}
-
-	shouldHaveTotalFiles(1)
+	shouldHaveTotalFiles(t, dbfolder, 1)
 	checkSetKey(t, db, "key1", "value1")
-	shouldHaveTotalFiles(1)
+	shouldHaveTotalFiles(t, dbfolder, 1)
 	checkSetKey(t, db, "key2", "value2")
-	shouldHaveTotalFiles(2)
+	shouldHaveTotalFiles(t, dbfolder, 2)
 	checkSetKey(t, db, "key3", "value3")
-	shouldHaveTotalFiles(3)
+	shouldHaveTotalFiles(t, dbfolder, 3)
 	checkSetKey(t, db, "key4", "value4")
-	shouldHaveTotalFiles(4)
+	shouldHaveTotalFiles(t, dbfolder, 4)
 
 	// should be able to get rolled over values
 	checkGetKey(t, db, "key1", "value1")
@@ -170,5 +170,53 @@ func TestDbReopen(t *testing.T) {
 		checkGetKey(t, db, "key2", "value2")
 		checkGetKey(t, db, "key3", "value3")
 		checkGetKey(t, db, "key4", "value4")
+	}
+}
+
+func TestDbMerge(t *testing.T) {
+	dir := t.TempDir()
+	dbfolder := fmt.Sprintf("%s/%s", dir, "testdb")
+
+	cfg := DefaultDatabaseConfig()
+	cfg.DatafileThreshold = 1 // always rollover
+
+	totalKeys := 50
+	store := make([]struct{ key, value string }, totalKeys)
+	for i := range totalKeys {
+		store[i].key = fmt.Sprintf("key%d", i)
+		store[i].value = fmt.Sprintf("value%d", i)
+	}
+
+	{
+		db, err := OpenDatabase(dbfolder, cfg)
+		if err != nil {
+			t.Error(err)
+		}
+
+		for _, s := range store {
+			checkSetKey(t, db, s.key, s.value)
+		}
+		shouldHaveTotalFiles(t, dbfolder, totalKeys)
+
+		db.merge()
+		// only have 2 files now, one is active, one is merged
+		shouldHaveTotalFiles(t, dbfolder, 2)
+
+		// saved key should be intact
+		for _, s := range store {
+			checkGetKey(t, db, s.key, s.value)
+		}
+	}
+
+	{
+		// re-open again
+		db, err := OpenDatabase(dbfolder, cfg)
+		if err != nil {
+			t.Error(err)
+		}
+		// saved key should be intact
+		for _, s := range store {
+			checkGetKey(t, db, s.key, s.value)
+		}
 	}
 }

@@ -43,7 +43,8 @@ func (d ActiveDatafile) Get(loc RecordLoc) (r Record, err error) {
 }
 
 func (d *ActiveDatafile) Save(k string, v string) (loc RecordLoc, err error) {
-	r, err := saveRecord(d.f, k, v)
+	r := NewRecord(k, v)
+	err = saveRecord(d.f, r)
 	if err != nil {
 		return loc, err
 	}
@@ -66,11 +67,10 @@ func getRecord(f *os.File, loc RecordLoc) (r Record, err error) {
 	return RecordFromBytes(buf), nil
 }
 
-func saveRecord(f *os.File, k, v string) (r Record, err error) {
-	r = NewRecord(k, v)
+func saveRecord(f *os.File, r Record) error {
 	buf, err := r.Bytes()
 	if err != nil {
-		return r, err
+		return err
 	}
 
 	n, err := f.Write(buf)
@@ -78,16 +78,16 @@ func saveRecord(f *os.File, k, v string) (r Record, err error) {
 	if err != nil {
 		p, err := f.Seek(0, io.SeekCurrent)
 		if err != nil {
-			return r, err
+			return err
 		}
 
 		err = f.Truncate(p - int64(n))
 		if err != nil {
-			return r, err
+			return err
 		}
 	}
 
-	return r, nil
+	return nil
 }
 
 func getAllRecords(f *os.File) (RecordsWithLoc, error) {

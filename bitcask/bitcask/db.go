@@ -113,6 +113,64 @@ func (db Database) Get(cmd Command) (value string, err error) {
 	return string(record.value), err
 }
 
+func (db *Database) merge() error {
+	records, err := GetAllRecordsFromDirectory(*db.dir)
+	if err != nil {
+		return err
+	}
+
+	keydir := Keydir{}
+	datafileId := INVALID_DATAFILE_ID
+
+	// we want the active datafile to be garbage collected after this block
+	// so subsequent read does not cause error
+	{
+		d, err := db.dir.tempActiveDatafile()
+		datafileId = d.id
+		if err != nil {
+			return err
+		}
+
+		pos := uint32(0)
+		for _, rl := range records {
+			err = saveRecord(d.f, rl.r)
+			if err != nil {
+				return err
+			}
+			keydir[string(rl.r.key)] = RecordLoc{d.id, rl.loc.sz, pos, rl.loc.tstamp}
+			pos += rl.loc.sz
+		}
+	}
+
+	if datafileId == INVALID_DATAFILE_ID {
+		panic("Invalid datafile id after set")
+	}
+
+	// all the records are now transfered, add it to the new keydir and delete the old files
+	// first, make sure the datafile id is added to read ids before performing merge
+	db.dir.readonlyDatafileIds[datafileId] = true
+	for k, r := range keydir {
+		existingRecord, ok := db.keydir[k]
+		// same record, switch location
+		if ok && existingRecord.tstamp == r.tstamp {
+			db.keydir[k] = r
+		}
+	}
+
+	// remove old datafile ids
+	readonlyDatafileIds := make([]DatafileId, 0, len(db.dir.readonlyDatafileIds))
+	for id := range db.dir.readonlyDatafileIds {
+		readonlyDatafileIds = append(readonlyDatafileIds, id)
+	}
+	for _, id := range readonlyDatafileIds {
+		if id != datafileId {
+			db.dir.removeReadonlyDatafile(id)
+		}
+	}
+
+	return nil
+}
+
 func (db Database) shouldRollover() bool {
 	return db.activeDatafile.sz >= db.cfg.DatafileThreshold
 }
