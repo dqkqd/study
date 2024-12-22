@@ -123,3 +123,38 @@ func TestDbRollover(t *testing.T) {
 	checkGetKey(t, db, "key3", "value3")
 	checkGetKey(t, db, "key4", "value4")
 }
+
+func TestDbReopen(t *testing.T) {
+	dir := t.TempDir()
+	dbfolder := fmt.Sprintf("%s/%s", dir, "testdb")
+
+	cfg := DefaultDatabaseConfig()
+	cfg.DatafileThreshold = 1 // always rollover
+
+	{
+		db, err := OpenDatabase(dbfolder, cfg)
+		if err != nil {
+			t.Error(err)
+		}
+		checkSetKey(t, db, "key1", "value1")
+		checkSetKey(t, db, "key2", "value2")
+		checkSetKey(t, db, "key3", "value3")
+		checkSetKey(t, db, "key4", "value4")
+		checkGetKey(t, db, "key1", "value1")
+		checkGetKey(t, db, "key2", "value2")
+		checkGetKey(t, db, "key3", "value3")
+		checkGetKey(t, db, "key4", "value4")
+	}
+
+	{
+		// re-open, still get the same key
+		db, err := OpenDatabase(dbfolder, cfg)
+		if err != nil {
+			t.Error(err)
+		}
+		checkGetKey(t, db, "key1", "value1")
+		checkGetKey(t, db, "key2", "value2")
+		checkGetKey(t, db, "key3", "value3")
+		checkGetKey(t, db, "key4", "value4")
+	}
+}

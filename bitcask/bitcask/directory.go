@@ -43,7 +43,12 @@ func openDirectory(folder string) (dir Directory, err error) {
 		maxDatafileId = max(maxDatafileId, datafileId)
 	}
 
-	return Directory{readonlyDatafileIds, folder, maxDatafileId + 1}, nil
+	return Directory{
+		readonlyDatafileIds,
+		folder,
+		// make new datafile id as active
+		maxDatafileId + 1,
+	}, nil
 }
 
 func (dir Directory) readonlyDatafile(id DatafileId) (d ReadonlyDatafile, error error) {

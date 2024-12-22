@@ -1,6 +1,7 @@
 package bitcask
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
@@ -18,6 +19,10 @@ type ActiveDatafile struct {
 
 func (d ReadonlyDatafile) Get(loc RecordLoc) (r Record, err error) {
 	return getRecord(d.f, loc)
+}
+
+func (d ReadonlyDatafile) GetAllRecords() (map[string]RecordAndPos, error) {
+	return getAllRecords(d.f)
 }
 
 func (d ActiveDatafile) Get(loc RecordLoc) (r Record, err error) {
@@ -70,4 +75,40 @@ func saveRecord(f *os.File, k, v string) (r Record, err error) {
 	}
 
 	return r, nil
+}
+
+func getAllRecords(f *os.File) (map[string]RecordAndPos, error) {
+	_, err := f.Seek(0, io.SeekStart)
+	if err != nil {
+		return nil, err
+	}
+
+	recordAndLocs := map[string]RecordAndPos{}
+	pos := 0
+	for {
+		buf := make([]byte, RECORD_HEADER_SIZE)
+		n, err := f.Read(buf)
+		if err != nil || n != RECORD_HEADER_SIZE {
+			break
+		}
+		keysz := binary.LittleEndian.Uint16(buf[8:10])
+		valuesz := binary.LittleEndian.Uint16(buf[10:12])
+
+		buf = append(buf, make([]byte, keysz+valuesz)...)
+		n, err = f.Read(buf[n:])
+		if n != int(keysz+valuesz) {
+			break
+		}
+
+		r := RecordFromBytes(buf)
+		oldr, existed := recordAndLocs[string(r.key)]
+
+		if !existed || r.tstamp > oldr.r.tstamp {
+			recordAndLocs[string(r.key)] = RecordAndPos{r, uint32(pos)}
+		}
+
+		pos += int(r.size())
+	}
+
+	return recordAndLocs, nil
 }

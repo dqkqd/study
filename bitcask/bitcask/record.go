@@ -14,6 +14,18 @@ type Record struct {
 	valuesz uint16
 }
 
+type RecordLoc struct {
+	datafileId DatafileId
+	sz         uint32
+	pos        uint32
+	tstamp     uint32
+}
+
+type RecordAndPos struct {
+	r   Record
+	pos uint32
+}
+
 const RECORD_HEADER_SIZE = 4 + 4 + 2 + 2
 
 func NewRecord(k, v string) (r Record) {

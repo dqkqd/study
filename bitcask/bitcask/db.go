@@ -56,7 +56,10 @@ func OpenDatabase(folder string, cfg Config) (db *Database, err error) {
 		return db, err
 	}
 
-	kd := OpenKeydir()
+	kd, err := openKeydir(dir)
+	if err != nil {
+		return db, err
+	}
 
 	return &Database{&dir, kd, folder, d, cfg}, nil
 }
@@ -100,7 +103,6 @@ func (db Database) Get(cmd Command) (value string, err error) {
 		record, err = db.activeDatafile.Get(loc)
 	} else {
 		// This key is in other files, need to open and read it
-		// TODO: cover test for this
 		rd, err := db.dir.readonlyDatafile(loc.datafileId)
 		if err != nil {
 			return value, err
