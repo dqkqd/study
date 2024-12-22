@@ -18,7 +18,7 @@ type Record struct {
 }
 
 func NewRecord(k, v string) (r Record) {
-	r.tstamp = uint64(time.Now().Unix())
+	r.tstamp = uint64(time.Now().UnixNano())
 
 	r.key = []byte(k)
 	r.value = []byte(v)
