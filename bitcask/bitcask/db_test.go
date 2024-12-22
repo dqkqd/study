@@ -123,4 +123,3 @@ func TestDbRollover(t *testing.T) {
 	checkGetKey(t, db, "key3", "value3")
 	checkGetKey(t, db, "key4", "value4")
 }
-

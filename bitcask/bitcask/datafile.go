@@ -7,44 +7,17 @@ import (
 )
 
 type ReadonlyDatafile struct {
-	dir *Directory
-	id  uint16
+	f *os.File
 }
 
 type ActiveDatafile struct {
-	f   *os.File // always hold file pointer for reading and writing
-	dir *Directory
-	id  uint16
-	sz  uint32 // file size to determine if it exceeds threshold
-}
-
-func (d ReadonlyDatafile) Active() (ActiveDatafile, error) {
-	return openAsActiveDatafile(d.dir, d.id)
+	f  *os.File
+	id DatafileId // need to know id to tell caller when saving record
+	sz uint32     // file size to determine if it exceeds threshold
 }
 
 func (d ReadonlyDatafile) Get(loc RecordLoc) (r Record, err error) {
-	f, err := os.Open(d.dir.DatafilePath(loc.datafileId))
-	if err != nil {
-		return r, err
-	}
-	return getRecord(f, loc)
-}
-
-func (d *ActiveDatafile) Readonly() ReadonlyDatafile {
-	defer func() { d = nil }()
-	return ReadonlyDatafile{d.dir, d.id}
-}
-
-func openAsActiveDatafile(dir *Directory, id uint16) (d ActiveDatafile, err error) {
-	f, err := os.OpenFile(dir.DatafilePath(id), os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
-	if err != nil {
-		return d, err
-	}
-	sz, err := f.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return d, err
-	}
-	return ActiveDatafile{f, dir, id, uint32(sz)}, nil
+	return getRecord(d.f, loc)
 }
 
 func (d ActiveDatafile) Get(loc RecordLoc) (r Record, err error) {

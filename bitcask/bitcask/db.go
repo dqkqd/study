@@ -33,9 +33,9 @@ type Config struct {
 
 type Database struct {
 	dir            *Directory
-	activeDatafile ActiveDatafile
 	keydir         Keydir
 	folder         string
+	activeDatafile ActiveDatafile
 	cfg            Config
 }
 
@@ -51,15 +51,14 @@ func OpenDatabase(folder string, cfg Config) (db *Database, err error) {
 		return db, err
 	}
 
-	// TODO: to not assign id = 1
-	d, err := openAsActiveDatafile(&dir, 1)
+	d, err := dir.activeDatafile()
 	if err != nil {
 		return db, err
 	}
 
 	kd := OpenKeydir()
 
-	return &Database{&dir, d, kd, folder, cfg}, nil
+	return &Database{&dir, kd, folder, d, cfg}, nil
 }
 
 func (db *Database) Set(cmd Command) error {
@@ -102,7 +101,10 @@ func (db Database) Get(cmd Command) (value string, err error) {
 	} else {
 		// This key is in other files, need to open and read it
 		// TODO: cover test for this
-		rd := ReadonlyDatafile{db.dir, loc.datafileId}
+		rd, err := db.dir.readonlyDatafile(loc.datafileId)
+		if err != nil {
+			return value, err
+		}
 		record, err = rd.Get(loc)
 	}
 
@@ -114,8 +116,7 @@ func (db Database) shouldRollover() bool {
 }
 
 func (db *Database) rollover() error {
-	nextId := db.activeDatafile.id + 1
-	d, err := openAsActiveDatafile(db.dir, nextId)
+	d, err := db.dir.nextActiveDatafile()
 	if err != nil {
 		return err
 	}

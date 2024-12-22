@@ -1,7 +1,7 @@
 package bitcask
 
 type RecordLoc struct {
-	datafileId uint16
+	datafileId DatafileId
 	sz         uint32
 	pos        uint32
 	tstamp     uint32
