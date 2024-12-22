@@ -84,15 +84,15 @@ func getAllRecords(f *os.File) (map[string]RecordAndPos, error) {
 	}
 
 	recordAndLocs := map[string]RecordAndPos{}
-	pos := 0
+	pos := uint32(0)
 	for {
 		buf := make([]byte, RECORD_HEADER_SIZE)
 		n, err := f.Read(buf)
 		if err != nil || n != RECORD_HEADER_SIZE {
 			break
 		}
-		keysz := binary.LittleEndian.Uint16(buf[8:10])
-		valuesz := binary.LittleEndian.Uint16(buf[10:12])
+		keysz := binary.LittleEndian.Uint32(buf[12:16])
+		valuesz := binary.LittleEndian.Uint32(buf[16:20])
 
 		buf = append(buf, make([]byte, keysz+valuesz)...)
 		n, err = f.Read(buf[n:])
@@ -104,10 +104,10 @@ func getAllRecords(f *os.File) (map[string]RecordAndPos, error) {
 		oldr, existed := recordAndLocs[string(r.key)]
 
 		if !existed || r.tstamp > oldr.r.tstamp {
-			recordAndLocs[string(r.key)] = RecordAndPos{r, uint32(pos)}
+			recordAndLocs[string(r.key)] = RecordAndPos{r, pos}
 		}
 
-		pos += int(r.size())
+		pos += r.size()
 	}
 
 	return recordAndLocs, nil
