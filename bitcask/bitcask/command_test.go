@@ -24,11 +24,11 @@ func TestSuccess(t *testing.T) {
 	for _, tc := range testCases {
 		cmd, err := ParseCommand(tc.input)
 		if err != nil {
-			t.Error("Expected to success")
+			t.Fatal("Expected to success")
 		}
 
 		if cmd != tc.want {
-			t.Errorf("Expected %s, got %s", tc.want, cmd)
+			t.Fatalf("Expected %s, got %s", tc.want, cmd)
 		}
 	}
 }
@@ -47,7 +47,7 @@ func TestFail(t *testing.T) {
 	for _, tc := range testCases {
 		_, err := ParseCommand(tc)
 		if err == nil {
-			t.Error("Expected error")
+			t.Fatal("Expected error")
 		}
 	}
 }

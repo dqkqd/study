@@ -13,7 +13,7 @@ func TestDatafileSetGetDeleteRecords(t *testing.T) {
 
 	d, err := dir.activeDatafile()
 	if err != nil {
-		t.Error("Cannot open active datafile")
+		t.Fatal("Cannot open active datafile")
 	}
 
 	testcases := []struct {
@@ -33,7 +33,7 @@ func TestDatafileSetGetDeleteRecords(t *testing.T) {
 	for i, tc := range testcases {
 		loc, err := d.Save(tc.key, tc.value)
 		if err != nil {
-			t.Errorf("Cannot save record: %s", err)
+			t.Fatalf("Cannot save record: %s", err)
 		}
 		locs[i] = loc
 	}
@@ -42,13 +42,13 @@ func TestDatafileSetGetDeleteRecords(t *testing.T) {
 	for i, tc := range testcases {
 		record, err := d.Get(locs[i])
 		if err != nil {
-			t.Errorf("Cannot get record at pos=%d", locs[i].pos)
+			t.Fatalf("Cannot get record at pos=%d", locs[i].pos)
 		}
 		if string(record.key) != tc.key {
-			t.Errorf("Got %s, want %s", record.key, tc.key)
+			t.Fatalf("Got %s, want %s", record.key, tc.key)
 		}
 		if string(record.value) != tc.value {
-			t.Errorf("Got %s, want %s", record.value, tc.value)
+			t.Fatalf("Got %s, want %s", record.value, tc.value)
 		}
 	}
 
@@ -57,7 +57,7 @@ func TestDatafileSetGetDeleteRecords(t *testing.T) {
 	for i, tc := range testcases {
 		loc, err := d.Delete(tc.key)
 		if err != nil {
-			t.Errorf("Cannot delete record: %s", err)
+			t.Fatalf("Cannot delete record: %s", err)
 		}
 		deletedLocs[i] = loc
 	}
@@ -66,13 +66,13 @@ func TestDatafileSetGetDeleteRecords(t *testing.T) {
 	for i, tc := range testcases {
 		record, err := d.Get(deletedLocs[i])
 		if err != nil {
-			t.Errorf("Cannot get record at pos=%d", deletedLocs[i].pos)
+			t.Fatalf("Cannot get record at pos=%d", deletedLocs[i].pos)
 		}
 		if string(record.key) != tc.key {
-			t.Errorf("Got %s, want %s", record.key, tc.key)
+			t.Fatalf("Got %s, want %s", record.key, tc.key)
 		}
 		if string(record.value) != TOMBSTONE {
-			t.Errorf("Got %s, want %s", record.value, tc.value)
+			t.Fatalf("Got %s, want %s", record.value, tc.value)
 		}
 	}
 }

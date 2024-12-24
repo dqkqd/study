@@ -12,17 +12,17 @@ func checkSetKey(t *testing.T, db *Database, key string, value string) {
 	cmd := Command{key, value, SetCommand}
 	err := db.Set(cmd)
 	if err != nil {
-		t.Errorf("Cannot set %s, error: %s", cmd, err)
+		t.Fatalf("Cannot set %s, error: %s", cmd, err)
 	}
 }
 
 func checkGetKey(t *testing.T, db *Database, key string, expected string) {
 	value, err := db.Get(Command{key: key, cmdType: GetCommand})
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	if value != expected {
-		t.Errorf("Got %s, want `%s`", value, expected)
+		t.Fatalf("Got %s, want `%s`", value, expected)
 	}
 }
 
@@ -30,27 +30,27 @@ func checkDeleteKey(t *testing.T, db *Database, key string) {
 	cmd := Command{key: key, cmdType: DeleteCommand}
 	err := db.Delete(cmd)
 	if err != nil {
-		t.Errorf("Cannot delete %s, error: %s", cmd, err)
+		t.Fatalf("Cannot delete %s, error: %s", cmd, err)
 	}
 }
 
 func shouldHaveTotalFiles(t *testing.T, folder string, expected int) {
 	files, err := os.ReadDir(folder)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	if len(files) != expected {
-		t.Errorf("Expect %d files, has %d", expected, len(files))
+		t.Fatalf("Expect %d files, has %d", expected, len(files))
 	}
 }
 
 func shouldHaveAtMostFiles(t *testing.T, folder string, expected int) {
 	files, err := os.ReadDir(folder)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	if len(files) > expected {
-		t.Errorf("Expect at most %d files, has %d", expected, len(files))
+		t.Fatalf("Expect at most %d files, has %d", expected, len(files))
 	}
 }
 
@@ -59,13 +59,13 @@ func TestDbQuery(t *testing.T) {
 	dbfolder := fmt.Sprintf("%s/%s", dir, "testdb")
 	db, err := OpenDatabase(dbfolder, DefaultDatabaseConfig())
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	defer db.Close()
 
 	_, err = db.Get(Command{key: "1", cmdType: GetCommand})
 	if err == nil {
-		t.Error("Key is is not set")
+		t.Fatal("Key is is not set")
 	}
 
 	checkSetKey(t, db, "1", "2")
@@ -75,7 +75,7 @@ func TestDbQuery(t *testing.T) {
 	checkDeleteKey(t, db, "1")
 	_, err = db.Get(Command{key: "1", cmdType: GetCommand})
 	if err == nil {
-		t.Error("Key 1 is deleted")
+		t.Fatal("Key 1 is deleted")
 	}
 }
 
@@ -84,7 +84,7 @@ func TestDbGet(t *testing.T) {
 	dbfolder := fmt.Sprintf("%s/%s", dir, "testdb")
 	db, err := OpenDatabase(dbfolder, DefaultDatabaseConfig())
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	defer db.Close()
 
@@ -113,7 +113,7 @@ func TestDbGetOverwrite(t *testing.T) {
 	dbfolder := fmt.Sprintf("%s/%s", dir, "testdb")
 	db, err := OpenDatabase(dbfolder, DefaultDatabaseConfig())
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	defer db.Close()
 
@@ -133,7 +133,7 @@ func TestDbRollover(t *testing.T) {
 
 	db, err := OpenDatabase(dbfolder, cfg)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	defer db.Close()
 
@@ -164,7 +164,7 @@ func TestDbReopen(t *testing.T) {
 	{
 		db, err := OpenDatabase(dbfolder, cfg)
 		if err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		}
 		checkSetKey(t, db, "key1", "value1")
 		checkSetKey(t, db, "key2", "value2")
@@ -181,7 +181,7 @@ func TestDbReopen(t *testing.T) {
 		// re-open, still get the same keys
 		db, err := OpenDatabase(dbfolder, cfg)
 		if err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		}
 		checkGetKey(t, db, "key1", "value1")
 		checkGetKey(t, db, "key2", "value2")
@@ -196,7 +196,7 @@ func TestDbReopen(t *testing.T) {
 		// re-open, can get the same keys and new key
 		db, err := OpenDatabase(dbfolder, cfg)
 		if err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		}
 		checkGetKey(t, db, "key1", "new value1")
 		checkGetKey(t, db, "key2", "value2")
@@ -224,7 +224,7 @@ func TestDbMerge(t *testing.T) {
 	{
 		db, err := OpenDatabase(dbfolder, cfg)
 		if err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		}
 
 		for _, s := range store {
@@ -247,7 +247,7 @@ func TestDbMerge(t *testing.T) {
 		// re-open again
 		db, err := OpenDatabase(dbfolder, cfg)
 		if err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		}
 		// saved key should be intact
 		for _, s := range store {
@@ -277,7 +277,7 @@ func TestDbAutoMerge(t *testing.T) {
 	{
 		db, err := OpenDatabase(dbfolder, cfg)
 		if err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		}
 
 		for _, s := range store {
@@ -295,7 +295,7 @@ func TestDbAutoMerge(t *testing.T) {
 		// re-open again
 		db, err := OpenDatabase(dbfolder, cfg)
 		if err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		}
 		// saved key should be intact
 		for _, s := range store {
@@ -324,7 +324,7 @@ func TestDbConcurrent(t *testing.T) {
 
 	db, err := OpenDatabase(dbfolder, cfg)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	defer db.Close()
 
@@ -368,7 +368,7 @@ func TestDbDeleteThenRepoen(t *testing.T) {
 	{
 		db, err := OpenDatabase(dbfolder, cfg)
 		if err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		}
 		checkSetKey(t, db, "key1", "value1")
 		checkSetKey(t, db, "key2", "value2")
@@ -385,7 +385,7 @@ func TestDbDeleteThenRepoen(t *testing.T) {
 		// re-open, still get the same keys
 		db, err := OpenDatabase(dbfolder, cfg)
 		if err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		}
 		checkGetKey(t, db, "key1", "value1")
 		checkGetKey(t, db, "key2", "value2")
@@ -402,7 +402,7 @@ func TestDbDeleteThenRepoen(t *testing.T) {
 		// re-open, can get the same keys but deleted key must not be present
 		db, err := OpenDatabase(dbfolder, cfg)
 		if err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		}
 		checkGetKey(t, db, "key1", "new value1")
 		checkGetKey(t, db, "key3", "value3")
@@ -410,7 +410,7 @@ func TestDbDeleteThenRepoen(t *testing.T) {
 
 		_, err = db.Get(Command{key: "key2", cmdType: GetCommand})
 		if err == nil {
-			t.Error("Key `key2` must be deleted")
+			t.Fatal("Key `key2` must be deleted")
 		}
 
 		db.Close()
@@ -435,7 +435,7 @@ func TestDbMergeShouldExcludeDeletedRecord(t *testing.T) {
 	{
 		db, err := OpenDatabase(dbfolder, cfg)
 		if err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		}
 		for _, s := range store {
 			checkSetKey(t, db, s.key, s.value)
@@ -450,7 +450,7 @@ func TestDbMergeShouldExcludeDeletedRecord(t *testing.T) {
 
 		_, err = db.Get(Command{key: store[0].key, cmdType: GetCommand})
 		if err == nil || strings.Contains(err.Error(), "Not existed") {
-			t.Errorf("Key must existed with %s value", TOMBSTONE)
+			t.Fatalf("Key must existed with %s value", TOMBSTONE)
 		}
 
 		// TOMBSTONE values are deleted after merge
@@ -458,7 +458,7 @@ func TestDbMergeShouldExcludeDeletedRecord(t *testing.T) {
 
 		_, err = db.Get(Command{key: store[0].key, cmdType: GetCommand})
 		if err == nil || !strings.Contains(err.Error(), "Not existed") {
-			t.Error("Key must not existed")
+			t.Fatal("Key must not existed")
 		}
 
 		db.Close()
@@ -468,11 +468,11 @@ func TestDbMergeShouldExcludeDeletedRecord(t *testing.T) {
 	{
 		db, err := OpenDatabase(dbfolder, cfg)
 		if err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		}
 		_, err = db.Get(Command{key: store[0].key, cmdType: GetCommand})
 		if err == nil || !strings.Contains(err.Error(), "Not existed") {
-			t.Error("Key must not existed")
+			t.Fatal("Key must not existed")
 		}
 	}
 }
