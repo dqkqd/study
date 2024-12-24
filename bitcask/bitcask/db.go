@@ -27,6 +27,11 @@ func (db *Database) HandleQuery(query string) {
 			fmt.Println(err)
 		}
 
+	case DeleteCommand:
+		err := db.Delete(cmd)
+		if err != nil {
+			fmt.Println(err)
+		}
 	}
 }
 
@@ -129,6 +134,13 @@ func (db *Database) Set(cmd Command) error {
 	return nil
 }
 
+func (db *Database) Delete(cmd Command) error {
+	if cmd.cmdType != DeleteCommand {
+		panic("Expected delete command")
+	}
+	return db.Set(Command{key: cmd.key, value: TOMBSTONE, cmdType: SetCommand})
+}
+
 func (db *Database) Get(cmd Command) (value string, err error) {
 	if cmd.cmdType != GetCommand {
 		panic("Expected get command")
@@ -157,7 +169,16 @@ func (db *Database) Get(cmd Command) (value string, err error) {
 		record, err = rd.Get(loc)
 	}
 
-	return string(record.value), err
+	if err != nil {
+		return value, err
+	}
+
+	value = string(record.value)
+	if value == TOMBSTONE {
+		return value, fmt.Errorf("Deleted key %s", cmd.key)
+	}
+
+	return value, nil
 }
 
 func (db *Database) shouldMerge() bool {
@@ -174,6 +195,8 @@ func (db *Database) merge() error {
 	}
 
 	keydir := Keydir{}
+	deletedRecords := map[string]Record{}
+
 	datafileId := INVALID_DATAFILE_ID
 
 	// we want the active datafile to be garbage collected after this block
@@ -187,6 +210,12 @@ func (db *Database) merge() error {
 
 		pos := uint32(0)
 		for _, rl := range records {
+			// skip deleted records
+			if rl.r.deleted() {
+				deletedRecords[string(rl.r.key)] = rl.r
+				continue
+			}
+
 			err = saveRecord(d.f, rl.r)
 			if err != nil {
 				return err
@@ -201,7 +230,17 @@ func (db *Database) merge() error {
 	}
 
 	// all the records are now transfered, add it to the new keydir and delete the old files
-	db.dir.readonlyDatafileIds[datafileId] = true
+
+	// delete record
+	for k, r := range deletedRecords {
+		existingRecord, ok := db.keydir[k]
+		// only touch key that exists in keydir that have the same timestamp
+		if ok && existingRecord.tstamp == r.tstamp {
+			delete(db.keydir, k)
+		}
+	}
+
+	// transfer new record location
 	for k, r := range keydir {
 		existingRecord, ok := db.keydir[k]
 		// only merge key that exists in keydir that have the same timestamp
@@ -210,6 +249,8 @@ func (db *Database) merge() error {
 		}
 	}
 
+	// set the new datafileId as read
+	db.dir.readonlyDatafileIds[datafileId] = true
 	// remove old datafile ids
 	readonlyDatafileIds := make([]DatafileId, 0, len(db.dir.readonlyDatafileIds))
 	for id := range db.dir.readonlyDatafileIds {

@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+const TOMBSTONE = "__DELETE__"
+
 const RECORD_HEADER_SIZE = 4 + 8 + 4 + 4
 
 type Record struct {
@@ -29,6 +31,10 @@ func NewRecord(k, v string) (r Record) {
 	r.crc = 0
 
 	return r
+}
+
+func (r Record) deleted() bool {
+	return string(r.value) == TOMBSTONE
 }
 
 func (r Record) size() uint32 {

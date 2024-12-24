@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestDatafileGetRecords(t *testing.T) {
+func TestDatafileSetGetDeleteRecords(t *testing.T) {
 	tempdir := t.TempDir()
 	dir, err := openDirectory(tempdir)
 	if err != nil {
@@ -48,6 +48,30 @@ func TestDatafileGetRecords(t *testing.T) {
 			t.Errorf("Got %s, want %s", record.key, tc.key)
 		}
 		if string(record.value) != tc.value {
+			t.Errorf("Got %s, want %s", record.value, tc.value)
+		}
+	}
+
+	deletedLocs := make([]RecordLoc, len(testcases))
+	// delete
+	for i, tc := range testcases {
+		loc, err := d.Delete(tc.key)
+		if err != nil {
+			t.Errorf("Cannot delete record: %s", err)
+		}
+		deletedLocs[i] = loc
+	}
+
+	// get deleted records
+	for i, tc := range testcases {
+		record, err := d.Get(deletedLocs[i])
+		if err != nil {
+			t.Errorf("Cannot get record at pos=%d", deletedLocs[i].pos)
+		}
+		if string(record.key) != tc.key {
+			t.Errorf("Got %s, want %s", record.key, tc.key)
+		}
+		if string(record.value) != TOMBSTONE {
 			t.Errorf("Got %s, want %s", record.value, tc.value)
 		}
 	}

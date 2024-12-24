@@ -42,6 +42,10 @@ func (d ActiveDatafile) Get(loc RecordLoc) (r Record, err error) {
 	return getRecord(d.f, loc)
 }
 
+func (d *ActiveDatafile) Delete(k string) (loc RecordLoc, err error) {
+	return d.Save(k, TOMBSTONE)
+}
+
 func (d *ActiveDatafile) Save(k string, v string) (loc RecordLoc, err error) {
 	r := NewRecord(k, v)
 	err = saveRecord(d.f, r)

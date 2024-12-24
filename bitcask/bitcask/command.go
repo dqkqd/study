@@ -10,6 +10,7 @@ type CommandType int
 const (
 	SetCommand CommandType = iota
 	GetCommand
+	DeleteCommand
 )
 
 type Command struct {
@@ -24,6 +25,8 @@ func (c Command) String() string {
 		return fmt.Sprintf("Get(%s)", c.key)
 	case SetCommand:
 		return fmt.Sprintf("Set(%s,%s)", c.key, c.value)
+	case DeleteCommand:
+		return fmt.Sprintf("Delete(%s)", c.key)
 	default:
 		panic("Unimplemented")
 	}
@@ -57,7 +60,12 @@ func ParseCommand(input string) (Command, error) {
 			return invalid("Expected `get <key>`")
 		}
 		return Command{s[1], "", GetCommand}, nil
+	case "delete":
+		if len(s) != 2 {
+			return invalid("Expected `delete <key>`")
+		}
+		return Command{s[1], "", DeleteCommand}, nil
 	default:
-		return invalid("Expected `set` or `get` command")
+		return invalid("Expected `set`, `get`, or `delete` command")
 	}
 }
