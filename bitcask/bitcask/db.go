@@ -1,10 +1,13 @@
 package bitcask
 
 import (
+	"context"
 	"fmt"
+	"sync"
+	"time"
 )
 
-func (db Database) HandleQuery(query string) {
+func (db *Database) HandleQuery(query string) {
 	cmd, err := ParseCommand(query)
 	if err != nil {
 		fmt.Println(err)
@@ -28,20 +31,29 @@ func (db Database) HandleQuery(query string) {
 }
 
 type Config struct {
-	DatafileThreshold uint32
+	MergeFrequency    uint64 // how long should merge be performed
+	DatafileThreshold uint32 // how big a datafile should be
+	NumReadonlyFiles  uint16 // how many readonly files in disk before merging
+	EnableAutoMerge   bool   // should merge is enabled (this is only used in test)
 }
 
 type Database struct {
 	dir            *Directory
 	keydir         Keydir
+	cancelMerge    context.CancelFunc
+	done           chan bool
 	folder         string
 	activeDatafile ActiveDatafile
 	cfg            Config
+	mu             sync.RWMutex
 }
 
 func DefaultDatabaseConfig() Config {
 	return Config{
 		DatafileThreshold: 1<<16 - 1,
+		NumReadonlyFiles:  100,
+		MergeFrequency:    5000,
+		EnableAutoMerge:   true,
 	}
 }
 
@@ -61,13 +73,45 @@ func OpenDatabase(folder string, cfg Config) (db *Database, err error) {
 		return db, err
 	}
 
-	return &Database{&dir, kd, folder, d, cfg}, nil
+	ctx, cancelFunc := context.WithCancel(context.Background())
+
+	db = &Database{&dir, kd, cancelFunc, make(chan bool), folder, d, cfg, sync.RWMutex{}}
+
+	go func(c context.Context) {
+		if cfg.EnableAutoMerge {
+			for {
+				time.Sleep(time.Duration(100 * cfg.MergeFrequency))
+
+				select {
+				case <-ctx.Done():
+					db.done <- true
+					return
+				default:
+					if db.shouldMerge() {
+						db.merge()
+					}
+				}
+			}
+		}
+	}(ctx)
+
+	return db, nil
+}
+
+func (db *Database) Close() {
+	if db.cfg.EnableAutoMerge {
+		db.cancelMerge()
+		<-db.done
+	}
 }
 
 func (db *Database) Set(cmd Command) error {
 	if cmd.cmdType != SetCommand {
 		panic("Expected set command")
 	}
+
+	db.mu.Lock()
+	defer db.mu.Unlock()
 
 	if db.shouldRollover() {
 		db.rollover()
@@ -85,10 +129,13 @@ func (db *Database) Set(cmd Command) error {
 	return nil
 }
 
-func (db Database) Get(cmd Command) (value string, err error) {
+func (db *Database) Get(cmd Command) (value string, err error) {
 	if cmd.cmdType != GetCommand {
 		panic("Expected get command")
 	}
+
+	db.mu.RLock()
+	defer db.mu.RUnlock()
 
 	// get the key's position from keydir
 	loc, ok := db.keydir[cmd.key]
@@ -113,8 +160,15 @@ func (db Database) Get(cmd Command) (value string, err error) {
 	return string(record.value), err
 }
 
+func (db *Database) shouldMerge() bool {
+	return len(db.dir.readonlyDatafileIds) > int(db.cfg.NumReadonlyFiles)
+}
+
 func (db *Database) merge() error {
-	records, err := GetAllRecordsFromDirectory(*db.dir)
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	records, err := GetReadonlyRecordsFromDirectory(*db.dir)
 	if err != nil {
 		return err
 	}
@@ -147,11 +201,10 @@ func (db *Database) merge() error {
 	}
 
 	// all the records are now transfered, add it to the new keydir and delete the old files
-	// first, make sure the datafile id is added to read ids before performing merge
 	db.dir.readonlyDatafileIds[datafileId] = true
 	for k, r := range keydir {
 		existingRecord, ok := db.keydir[k]
-		// same record, switch location
+		// only merge key that exists in keydir that have the same timestamp
 		if ok && existingRecord.tstamp == r.tstamp {
 			db.keydir[k] = r
 		}
@@ -171,7 +224,7 @@ func (db *Database) merge() error {
 	return nil
 }
 
-func (db Database) shouldRollover() bool {
+func (db *Database) shouldRollover() bool {
 	return db.activeDatafile.sz >= db.cfg.DatafileThreshold
 }
 

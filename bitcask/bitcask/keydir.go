@@ -2,11 +2,11 @@ package bitcask
 
 type Keydir map[string]RecordLoc
 
-func GetAllRecordsFromDirectory(dir Directory) (RecordsWithLoc, error) {
+func GetReadonlyRecordsFromDirectory(dir Directory) (RecordsWithLoc, error) {
 	allRecords := RecordsWithLoc{}
 
-	for dfid := range dir.readonlyDatafileIds {
-		rd, err := dir.readonlyDatafile(dfid)
+	for id := range dir.readonlyDatafileIds {
+		rd, err := dir.readonlyDatafile(id)
 		if err != nil {
 			return allRecords, err
 		}
@@ -23,7 +23,7 @@ func GetAllRecordsFromDirectory(dir Directory) (RecordsWithLoc, error) {
 func openKeydir(dir Directory) (kd Keydir, err error) {
 	kd = Keydir{}
 
-	allRecords, err := GetAllRecordsFromDirectory(dir)
+	allRecords, err := GetReadonlyRecordsFromDirectory(dir)
 	if err != nil {
 		return kd, err
 	}

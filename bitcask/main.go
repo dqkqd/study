@@ -16,6 +16,7 @@ func main() {
 	if err != nil {
 		panic("Cannot open database")
 	}
+	defer db.Close()
 
 	for {
 		fmt.Print(">>> ")

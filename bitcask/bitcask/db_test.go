@@ -3,6 +3,7 @@ package bitcask
 import (
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 )
 
@@ -34,6 +35,16 @@ func shouldHaveTotalFiles(t *testing.T, folder string, expected int) {
 	}
 }
 
+func shouldHaveAtMostFiles(t *testing.T, folder string, expected int) {
+	files, err := os.ReadDir(folder)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(files) > expected {
+		t.Errorf("Expect at most %d files, has %d", expected, len(files))
+	}
+}
+
 func TestDbQuery(t *testing.T) {
 	dir := t.TempDir()
 	dbfolder := fmt.Sprintf("%s/%s", dir, "testdb")
@@ -41,6 +52,7 @@ func TestDbQuery(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	defer db.Close()
 
 	cmd := Command{key: "1", cmdType: GetCommand}
 	_, err = db.Get(cmd)
@@ -59,6 +71,7 @@ func TestDbGet(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	defer db.Close()
 
 	testcases := []struct {
 		key, value string
@@ -87,6 +100,7 @@ func TestDbGetOverwrite(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	defer db.Close()
 
 	checkSetKey(t, db, "key", "value")
 	checkGetKey(t, db, "key", "value")
@@ -106,6 +120,7 @@ func TestDbRollover(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	defer db.Close()
 
 	shouldHaveTotalFiles(t, dbfolder, 1)
 	checkSetKey(t, db, "key1", "value1")
@@ -144,6 +159,7 @@ func TestDbReopen(t *testing.T) {
 		checkGetKey(t, db, "key2", "value2")
 		checkGetKey(t, db, "key3", "value3")
 		checkGetKey(t, db, "key4", "value4")
+		db.Close()
 	}
 
 	{
@@ -158,6 +174,7 @@ func TestDbReopen(t *testing.T) {
 		checkGetKey(t, db, "key4", "value4")
 		// set new keys
 		checkSetKey(t, db, "key1", "new value1")
+		db.Close()
 	}
 
 	{
@@ -170,6 +187,7 @@ func TestDbReopen(t *testing.T) {
 		checkGetKey(t, db, "key2", "value2")
 		checkGetKey(t, db, "key3", "value3")
 		checkGetKey(t, db, "key4", "value4")
+		db.Close()
 	}
 }
 
@@ -179,6 +197,7 @@ func TestDbMerge(t *testing.T) {
 
 	cfg := DefaultDatabaseConfig()
 	cfg.DatafileThreshold = 1 // always rollover
+	cfg.EnableAutoMerge = false
 
 	totalKeys := 50
 	store := make([]struct{ key, value string }, totalKeys)
@@ -206,6 +225,7 @@ func TestDbMerge(t *testing.T) {
 		for _, s := range store {
 			checkGetKey(t, db, s.key, s.value)
 		}
+		db.Close()
 	}
 
 	{
@@ -218,5 +238,108 @@ func TestDbMerge(t *testing.T) {
 		for _, s := range store {
 			checkGetKey(t, db, s.key, s.value)
 		}
+		db.Close()
 	}
+}
+
+func TestDbAutoMerge(t *testing.T) {
+	dir := t.TempDir()
+	dbfolder := fmt.Sprintf("%s/%s", dir, "testdb")
+
+	cfg := DefaultDatabaseConfig()
+	cfg.DatafileThreshold = 1 // always rollover
+	cfg.EnableAutoMerge = true
+	cfg.MergeFrequency = 100
+	cfg.NumReadonlyFiles = 1
+
+	totalKeys := 100
+	store := make([]struct{ key, value string }, totalKeys)
+	for i := range totalKeys {
+		store[i].key = fmt.Sprintf("key%d", i)
+		store[i].value = fmt.Sprintf("value%d", i)
+	}
+
+	{
+		db, err := OpenDatabase(dbfolder, cfg)
+		if err != nil {
+			t.Error(err)
+		}
+
+		for _, s := range store {
+			checkSetKey(t, db, s.key, s.value)
+		}
+		for _, s := range store {
+			checkGetKey(t, db, s.key, s.value)
+		}
+		db.Close()
+	}
+
+	shouldHaveAtMostFiles(t, dbfolder, 5)
+
+	{
+		// re-open again
+		db, err := OpenDatabase(dbfolder, cfg)
+		if err != nil {
+			t.Error(err)
+		}
+		// saved key should be intact
+		for _, s := range store {
+			checkGetKey(t, db, s.key, s.value)
+		}
+		db.Close()
+	}
+}
+
+func TestDbConcurrent(t *testing.T) {
+	dir := t.TempDir()
+	dbfolder := fmt.Sprintf("%s/%s", dir, "testdb")
+
+	cfg := DefaultDatabaseConfig()
+	cfg.DatafileThreshold = 1 // always rollover
+	cfg.EnableAutoMerge = true
+	cfg.MergeFrequency = 100
+	cfg.NumReadonlyFiles = 1
+
+	totalKeys := 100
+	store := make([]struct{ key, value string }, totalKeys)
+	for i := range totalKeys {
+		store[i].key = fmt.Sprintf("key%d", i)
+		store[i].value = fmt.Sprintf("value%d", i)
+	}
+
+	db, err := OpenDatabase(dbfolder, cfg)
+	if err != nil {
+		t.Error(err)
+	}
+	defer db.Close()
+
+	var wg sync.WaitGroup
+
+	// 50 concurrent writes
+	for i := range 50 {
+		wg.Add(1)
+		go func() {
+			checkSetKey(t, db, store[i].key, store[i].value)
+			defer wg.Done()
+		}()
+	}
+	wg.Wait()
+
+	// 50 concurrent read
+	for i := range 50 {
+		wg.Add(1)
+		go func() {
+			checkGetKey(t, db, store[i].key, store[i].value)
+			defer wg.Done()
+		}()
+	}
+	// 50 concurrent write
+	for i := range 50 {
+		wg.Add(1)
+		go func() {
+			checkSetKey(t, db, store[i+50].key, store[i+50].value)
+			defer wg.Done()
+		}()
+	}
+	wg.Wait()
 }

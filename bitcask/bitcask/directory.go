@@ -2,7 +2,6 @@ package bitcask
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -40,33 +39,27 @@ func openDirectory(folder string) (dir Directory, err error) {
 
 	dir.folder = folder
 	dir.readonlyDatafileIds = readonlyDatafileIds
-	dir.activeDatafileId = dir.getNextActiveDatafileId()
+	dir.activeDatafileId = dir.nextActiveDatafileId()
 	return dir, nil
 }
 
 func (dir Directory) readonlyDatafile(id DatafileId) (d ReadonlyDatafile, error error) {
-	if !dir.readonlyDatafileIds[id] {
-		return d, fmt.Errorf("Non existed readonly datafile id %d", id)
-	}
 	f, err := os.Open(dir.datafilePath(id))
 	return ReadonlyDatafile{f, id}, err
 }
 
 func (dir Directory) activeDatafile() (d ActiveDatafile, err error) {
-	f, err := os.OpenFile(dir.datafilePath(dir.activeDatafileId), os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
-	sz, err := f.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return d, err
-	}
-	return ActiveDatafile{f, dir.activeDatafileId, uint32(sz)}, err
+	f, err := os.OpenFile(dir.datafilePath(dir.activeDatafileId), os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
+	return ActiveDatafile{f, dir.activeDatafileId, 0}, err
 }
 
-func (dir Directory) getNextActiveDatafileId() DatafileId {
+func (dir Directory) nextActiveDatafileId() DatafileId {
 	datafileId := INVALID_DATAFILE_ID + 1
 	for datafileId == dir.activeDatafileId || dir.readonlyDatafileIds[datafileId] {
-		_, err := os.Stat(dir.datafilePath(datafileId))
-		if err != nil {
-			// file does not exist, can use
+		f, err := os.OpenFile(dir.datafilePath(datafileId), os.O_RDWR|os.O_CREATE|os.O_EXCL, 0666)
+		if err == nil {
+			// file does not exist
+			f.Close()
 			break
 		}
 		datafileId++
@@ -78,21 +71,18 @@ func (dir *Directory) nextActiveDatafile() (d ActiveDatafile, err error) {
 	// set current active datafile as readonly
 	dir.readonlyDatafileIds[dir.activeDatafileId] = true
 	// move to the next one
-	dir.activeDatafileId = dir.getNextActiveDatafileId()
+	dir.activeDatafileId = dir.nextActiveDatafileId()
 	return dir.activeDatafile()
 }
 
 // Create a temporary active datafile for write
 func (dir Directory) tempActiveDatafile() (d ActiveDatafile, err error) {
-	datafileId := dir.getNextActiveDatafileId()
-	f, err := os.OpenFile(dir.datafilePath(datafileId), os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
+	datafileId := dir.nextActiveDatafileId()
+	f, err := os.OpenFile(dir.datafilePath(datafileId), os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
 	return ActiveDatafile{f, datafileId, 0}, err
 }
 
 func (dir *Directory) removeReadonlyDatafile(id DatafileId) error {
-	if !dir.readonlyDatafileIds[id] {
-		return fmt.Errorf("Datafile id %d does not exist", id)
-	}
 	fp := dir.datafilePath(id)
 	err := os.Remove(fp)
 	if err != nil {
