@@ -3,8 +3,18 @@ name = "kvs"
 version = "0.1.0"
 authors = ["Khanh Duong Quoc <dqkqdlot@gmail.com>"]
 description = "A key-value store"
+repository = "https://github.com/dqkqd/study/tree/main/pingcap-bitcask/rust/bitcask"
+keywords = ["bitcask", "key-value store", "kvs"]
+categories = ["database"]
 edition = "2018"
+
+[lib]
+path = "src/lib.rs"
+crate-type = ["lib"]
 
 [dev-dependencies]
 assert_cmd = "2.0.16"
 predicates = "3.1.2"
+
+[dependencies]
+clap = { version = "4.5.23", features = ["derive"] }

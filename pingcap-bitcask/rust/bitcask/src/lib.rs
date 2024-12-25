@@ -1,18 +1,6 @@
-// just leave it empty for now
+//! **An in memory key value store**
 
-pub struct KvStore;
+#![deny(missing_docs)]
 
-impl KvStore {
-    pub fn new() -> KvStore {
-        unimplemented!()
-    }
-    pub fn set(&self, key: String, value: String) {
-        unimplemented!()
-    }
-    pub fn get(&self, key: String) -> Option<String> {
-        unimplemented!()
-    }
-    pub fn remove(&self, key: String) {
-        unimplemented!()
-    }
-}
+mod kvs;
+pub use kvs::KvStore;
