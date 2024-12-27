@@ -15,6 +15,12 @@ crate-type = ["lib"]
 [dev-dependencies]
 assert_cmd = "2.0.16"
 predicates = "3.1.2"
+tempfile = "3.14.0"
+walkdir = "2.5.0"
 
 [dependencies]
+thiserror = "2.0.9"
+bson = "2.13.0"
 clap = { version = "4.5.23", features = ["derive"] }
+serde = { version = "1.0.216", features = ["derive"] }
+glob = "0.3.1"

@@ -1,4 +1,7 @@
+use std::env;
+
 use clap::{Parser, Subcommand};
+use kvs::Result;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -22,19 +25,31 @@ enum Commands {
     },
 }
 
-fn main() {
+fn main() -> Result<()> {
     let cli = Cli::parse();
-    let _ = kvs::KvStore::new();
+
+    let current_dir = env::current_dir().expect("get current working directory");
+    let mut kvs = kvs::KvStore::open(current_dir)?;
 
     match cli.command {
-        Commands::Set { key: _, value: _ } => {
-            panic!("unimplemented")
+        Commands::Set { key, value } => {
+            kvs.set(key, value)?;
         }
-        Commands::Get { key: _ } => {
-            panic!("unimplemented")
+        Commands::Get { key } => {
+            let value = kvs.get(key)?;
+            match value {
+                Some(value) => println!("{}", value),
+                None => println!("Key not found"),
+            }
         }
-        Commands::Remove { key: _ } => {
-            panic!("unimplemented")
+        Commands::Remove { key } => {
+            if let Err(err) = kvs.remove(key) {
+                if matches!(err, kvs::KvError::KeyDoesNotExist(_)) {
+                    println!("Key not found");
+                }
+                return Err(err);
+            }
         }
     }
+    Ok(())
 }
