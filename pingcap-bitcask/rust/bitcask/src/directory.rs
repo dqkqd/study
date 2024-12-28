@@ -46,7 +46,7 @@ impl Directory {
         if let Ok(active_datafile) = self.next_active_datafile() {
             self.readonly_datafiles.insert(
                 self.active_datafile.id,
-                self.readonly_datafile(&self.active_datafile.id),
+                readonly_datafile(&self.path, &self.active_datafile.id),
             );
 
             self.active_datafile = active_datafile;
@@ -55,10 +55,6 @@ impl Directory {
 
     pub fn next_active_datafile(&self) -> Result<ActiveDatafile> {
         next_active_datafile(&self.path)
-    }
-
-    pub fn readonly_datafile(&self, id: &FileId) -> ReadonlyDatafile {
-        readonly_datafile(&self.path, id)
     }
 
     pub fn remove_readonly_datafile(&mut self, id: &FileId) -> Result<()> {

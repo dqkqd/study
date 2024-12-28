@@ -1,113 +1,107 @@
-use std::{collections::BTreeMap, path::Path, sync::mpsc, thread};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::{Arc, RwLock},
+};
 
 use crate::{
-    datafile::{ActiveDatafile, TimedLocation},
-    directory::{readonly_datafile, FileId},
-    kvs::KeyLocations,
-    KvError, Result,
+    datafile::TimedLocation,
+    directory::{readonly_datafile, Directory, FileId},
+    kvs::{read_lock, write_lock, KeyLocations},
+    KvOption, Result,
 };
 
 #[derive(Debug)]
-enum Status {
-    Free,
-    Running,
-}
-
-#[derive(Debug)]
-pub(crate) struct MergeInfo {
+pub struct MergeInfo {
     pub new_readonly_datafile_id: FileId,
     pub readonly_datafile_ids: Vec<FileId>,
     pub key_locations: KeyLocations,
 }
 
-type MergeResult = Result<MergeInfo>;
+fn get_merge_info(
+    directory: &Arc<RwLock<Directory>>,
+    key_locations: &Arc<RwLock<KeyLocations>>,
+    options: KvOption,
+) -> Result<Option<MergeInfo>> {
+    let directory_reader = read_lock(directory)?;
 
-#[derive(Debug)]
-pub(crate) struct Merger {
-    tx: mpsc::Sender<MergeResult>,
-    rx: mpsc::Receiver<MergeResult>,
-    status: Status,
-}
-
-impl Merger {
-    pub fn new() -> Merger {
-        let (tx, rx) = mpsc::channel();
-        Merger {
-            tx,
-            rx,
-            status: Status::Free,
-        }
+    // No need to merge
+    if directory_reader.readonly_datafiles.len() < options.num_readonly_datafiles {
+        return Ok(None);
     }
 
-    pub fn running(&self) -> bool {
-        matches!(self.status, Status::Running)
-    }
+    let mut new_datafile = directory_reader.next_active_datafile()?;
+    let readonly_datafile_ids: BTreeSet<FileId> = directory_reader
+        .readonly_datafiles
+        .keys()
+        .cloned()
+        .collect();
+    let path = directory_reader.path.clone();
+    drop(directory_reader);
 
-    pub fn start<P: AsRef<Path>>(
-        &mut self,
-        folder: P,
-        new_datafile: ActiveDatafile,
-        readonly_datafile_ids: Vec<FileId>,
-    ) {
-        if self.running() {
-            return;
-        }
+    let locations: Vec<TimedLocation> = {
+        read_lock(key_locations)?
+            .values()
+            .cloned()
+            .filter(|location| readonly_datafile_ids.contains(&location.loc.id))
+            .collect()
+    };
 
-        self.status = Status::Running;
-
-        let tx = self.tx.clone();
-        let path = folder.as_ref().to_path_buf();
-        thread::spawn(move || {
-            let res = merge_readonly_datafiles(path, new_datafile, readonly_datafile_ids);
-            tx.send(res)
-        });
-    }
-
-    pub fn result(&mut self) -> MergeResult {
-        match self.rx.try_recv() {
-            Ok(res) => {
-                self.status = Status::Free;
-                res
-            }
-            Err(_) => Err(KvError::MergeResultNotAvailable),
-        }
-    }
-}
-
-/// Perform merge readonly datafiles.
-/// This merge should run in separated process,
-/// so it should not write to `key_locations` directly.
-pub(crate) fn merge_readonly_datafiles<P: AsRef<Path>>(
-    folder: P,
-    mut new_datafile: ActiveDatafile,
-    readonly_datafile_ids: Vec<FileId>,
-) -> MergeResult {
-    // Read all keys' location from readonly files.
-    let mut key_locations: BTreeMap<String, TimedLocation> = BTreeMap::new();
-    for file_ids in &readonly_datafile_ids {
-        let datafile = readonly_datafile(&folder, file_ids);
-        for (command, location) in datafile.all_commands()? {
-            let location = location.timed_location(command.timestamp());
-            merge_location(&mut key_locations, command.key(), location);
-        }
-    }
-
-    // Write all to new datafiles and update keys' location
-    for timed_location in key_locations.values_mut() {
-        let location = timed_location.loc;
-        let datafile = readonly_datafile(&folder, &location.id);
-        let command = datafile.read(&location)?;
-
+    let mut new_key_locations: BTreeMap<String, TimedLocation> = BTreeMap::new();
+    for location in locations {
+        let datafile = readonly_datafile(&path, &location.loc.id);
+        let command = datafile.read(&location.loc)?;
         let new_location = new_datafile.location.timed_location(command.timestamp());
         new_datafile.write(&command)?;
-        *timed_location = new_location;
+        merge_location(&mut new_key_locations, command.key(), new_location);
     }
 
-    Ok(MergeInfo {
+    Ok(Some(MergeInfo {
         new_readonly_datafile_id: new_datafile.id,
-        readonly_datafile_ids,
-        key_locations,
-    })
+        readonly_datafile_ids: readonly_datafile_ids.into_iter().collect(),
+        key_locations: new_key_locations,
+    }))
+}
+
+fn merge(
+    directory: &Arc<RwLock<Directory>>,
+    key_locations: &Arc<RwLock<KeyLocations>>,
+    merge_info: MergeInfo,
+) -> Result<()> {
+    {
+        // transfer new key
+        let mut key_locations = write_lock(key_locations)?;
+        for (key, location) in merge_info.key_locations {
+            merge_location(&mut key_locations, key, location)
+        }
+    }
+
+    {
+        let mut directory = write_lock(directory)?;
+
+        // set the new readonly file id pointing to `new_datafile`
+        let datafile = readonly_datafile(&directory.path, &merge_info.new_readonly_datafile_id);
+        directory
+            .readonly_datafiles
+            .insert(merge_info.new_readonly_datafile_id, datafile);
+
+        // remove old file ids
+        for file_id in merge_info.readonly_datafile_ids {
+            directory.remove_readonly_datafile(&file_id)?;
+        }
+    }
+
+    Ok(())
+}
+
+pub(crate) fn background_merge(
+    directory: &Arc<RwLock<Directory>>,
+    key_locations: &Arc<RwLock<KeyLocations>>,
+    options: KvOption,
+) -> Result<()> {
+    if let Some(merge_info) = get_merge_info(directory, key_locations, options)? {
+        merge(directory, key_locations, merge_info)?;
+    }
+    Ok(())
 }
 
 pub(crate) fn merge_location(
