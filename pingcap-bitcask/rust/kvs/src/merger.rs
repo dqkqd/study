@@ -1,9 +1,12 @@
-use std::{collections::BTreeMap, path::Path, sync::mpsc, thread};
+use std::{
+    path::{Path, PathBuf},
+    sync::mpsc,
+    thread,
+};
 
 use crate::{
-    datafile::{ActiveDatafile, TimedLocation},
-    directory::{readonly_datafile, FileId},
-    kvs::KeyLocations,
+    command::CommandLocations,
+    log::{finder, LogId, LogRead, LogReader, LogReaderWriter, LogWrite},
     KvError, Result,
 };
 
@@ -15,26 +18,29 @@ enum Status {
 
 #[derive(Debug)]
 pub(crate) struct MergeInfo {
-    pub new_readonly_datafile_id: FileId,
-    pub readonly_datafile_ids: Vec<FileId>,
-    pub key_locations: KeyLocations,
+    pub reader_ids: Vec<LogId>,
+    pub locations: CommandLocations,
 }
 
 type MergeResult = Result<MergeInfo>;
 
 #[derive(Debug)]
 pub(crate) struct Merger {
-    tx: mpsc::Sender<MergeResult>,
-    rx: mpsc::Receiver<MergeResult>,
+    path: PathBuf,
+    sender: mpsc::Sender<MergeResult>,
+    receiver: mpsc::Receiver<MergeResult>,
     status: Status,
 }
 
 impl Merger {
-    pub fn new() -> Merger {
-        let (tx, rx) = mpsc::channel();
+    pub fn new<P: AsRef<Path>>(path: P) -> Merger {
+        let path = path.as_ref().to_path_buf();
+        let (sender, receiver) = mpsc::channel();
+
         Merger {
-            tx,
-            rx,
+            path,
+            sender,
+            receiver,
             status: Status::Free,
         }
     }
@@ -42,85 +48,51 @@ impl Merger {
     pub fn running(&self) -> bool {
         matches!(self.status, Status::Running)
     }
-
-    pub fn start<P: AsRef<Path>>(
-        &mut self,
-        folder: P,
-        new_datafile: ActiveDatafile,
-        readonly_datafile_ids: Vec<FileId>,
-    ) {
+    pub fn start(&mut self, reader_ids: Vec<LogId>) {
         if self.running() {
             return;
         }
-
         self.status = Status::Running;
 
-        let tx = self.tx.clone();
-        let path = folder.as_ref().to_path_buf();
+        let sender = self.sender.clone();
+        let path = self.path.clone();
         thread::spawn(move || {
-            let res = merge_readonly_datafiles(path, new_datafile, readonly_datafile_ids);
-            tx.send(res)
+            let res = merge(&path, reader_ids);
+            let _ = sender.send(res);
         });
     }
 
     pub fn result(&mut self) -> MergeResult {
-        match self.rx.try_recv() {
-            Ok(res) => {
-                self.status = Status::Free;
-                res
-            }
-            Err(_) => Err(KvError::MergeResultNotAvailable),
-        }
+        let res = self
+            .receiver
+            .try_recv()
+            .map_err(|_| KvError::MergeResultNotAvailable)?;
+        self.status = Status::Free;
+        res
     }
 }
 
-/// Perform merge readonly datafiles.
-/// This merge should run in separated process,
-/// so it should not write to `key_locations` directly.
-pub(crate) fn merge_readonly_datafiles<P: AsRef<Path>>(
-    folder: P,
-    mut new_datafile: ActiveDatafile,
-    readonly_datafile_ids: Vec<FileId>,
-) -> MergeResult {
-    // Read all keys' location from readonly files.
-    let mut key_locations: BTreeMap<String, TimedLocation> = BTreeMap::new();
-    for file_ids in &readonly_datafile_ids {
-        let datafile = readonly_datafile(&folder, file_ids);
-        for (command, location) in datafile.all_commands()? {
-            let location = location.timed_location(command.timestamp());
-            merge_location(&mut key_locations, command.key(), location);
+fn merge<P: AsRef<Path>>(path: P, reader_ids: Vec<LogId>) -> MergeResult {
+    let mut locations = CommandLocations::new();
+
+    let mut writer = LogReaderWriter::open(&path, finder::next_log_id(&path))?;
+
+    for id in &reader_ids {
+        let reader = LogReader::open(&path, *id)?;
+        for (command, location) in reader.into_commands()? {
+            locations.merge(command.key(), location);
         }
     }
 
-    // Write all to new datafiles and update keys' location
-    for timed_location in key_locations.values_mut() {
-        let location = timed_location.loc;
-        let datafile = readonly_datafile(&folder, &location.id);
-        let command = datafile.read(&location)?;
-
-        let new_location = new_datafile.location.timed_location(command.timestamp());
-        new_datafile.write(&command)?;
-        *timed_location = new_location;
+    for location in locations.data.values_mut() {
+        let command = LogReader::open(&path, location.id)?.read(location)?;
+        *location = writer.write(&command)?;
     }
+
+    writer.transfer()?;
 
     Ok(MergeInfo {
-        new_readonly_datafile_id: new_datafile.id,
-        readonly_datafile_ids,
-        key_locations,
+        reader_ids,
+        locations,
     })
-}
-
-pub(crate) fn merge_location(
-    key_locations: &mut BTreeMap<String, TimedLocation>,
-    key: String,
-    location: TimedLocation,
-) {
-    key_locations
-        .entry(key)
-        .and_modify(|old_location| {
-            if old_location.timestamp < location.timestamp {
-                *old_location = location;
-            }
-        })
-        .or_insert(location);
 }

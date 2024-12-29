@@ -20,6 +20,8 @@ pub enum KvError {
     KeyDoesNotExist(String),
     #[error("cannot write bytes length `{0}`")]
     CannotWriteLen(usize),
+    #[error("cannot transfer active log file, err: `{0}`")]
+    CannotTransferActiveLog(String),
 
     #[error("merge result not available")]
     MergeResultNotAvailable,

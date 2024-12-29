@@ -1,21 +1,33 @@
 use crate::{
-    command::Command,
-    datafile::TimedLocation,
-    directory::{Directory, FileId},
-    error::{KvError, Result},
-    merger::{merge_location, Merger},
-    KvOption,
+    command::{Command, CommandLocations},
+    log::{finder, LogId, LogRead, LogReader, LogReaderWriter, LogWrite},
+    merger::Merger,
+    KvError, KvOption, Result,
 };
-use std::{collections::BTreeMap, path::Path};
-
-pub(crate) type KeyLocations = BTreeMap<String, TimedLocation>;
+use std::{
+    collections::BTreeSet,
+    fs::{self, File},
+    path::{Path, PathBuf},
+};
 
 /// An on-disk key value store.
 #[derive(Debug)]
 pub struct KvStore {
-    directory: Directory,
-    key_locations: KeyLocations,
+    /// Path to the store.
+    path: PathBuf,
+
+    /// Append writer recoding the incoming commands.
+    writer: LogReaderWriter<File>,
+    /// Immutable readers.
+    readers: BTreeSet<LogId>,
+
+    /// In memory map pointing to located commands on disk.
+    locations: CommandLocations,
+
+    /// Database options.
     options: KvOption,
+
+    /// Merger controls the merging process.
     merger: Merger,
 }
 
@@ -25,22 +37,36 @@ impl KvStore {
         KvStore::open_with_options(path, KvOption::default())
     }
 
+    /// Open database with provided options.
     pub(crate) fn open_with_options<P: AsRef<Path>>(path: P, options: KvOption) -> Result<KvStore> {
-        let mut key_locations: KeyLocations = BTreeMap::new();
-        let directory = Directory::open(&path)?;
+        let mut locations = CommandLocations::new();
 
-        for readonly_datafile in directory.readonly_datafiles.values() {
-            for (command, location) in readonly_datafile.all_commands()? {
-                let location = location.timed_location(command.timestamp());
-                merge_location(&mut key_locations, command.key(), location);
+        // Transfer all previous remaining written log.
+        for id in finder::writer_log_ids(&path)? {
+            let writer = LogReaderWriter::open(&path, id)?;
+            writer.transfer()?;
+        }
+
+        // Read all commands from read-only log files.
+        let readers: BTreeSet<LogId> = finder::immutable_log_ids(&path)?.into_iter().collect();
+        for id in &readers {
+            let reader = LogReader::open(&path, *id)?;
+            for (command, location) in reader.into_commands()? {
+                locations.merge(command.key(), location);
             }
         }
 
+        let writer = LogReaderWriter::open(&path, finder::next_log_id(&path))?;
+
+        let merger = Merger::new(&path);
+
         let store = KvStore {
-            directory,
-            key_locations,
+            path: path.as_ref().to_path_buf(),
+            writer,
+            readers,
+            locations,
             options,
-            merger: Merger::new(),
+            merger,
         };
 
         Ok(store)
@@ -63,20 +89,12 @@ impl KvStore {
     /// # }
     /// ```
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
-        if self.should_rollover_active_datafile() {
-            self.directory.rollover_active_datafile();
-        }
-
+        self.rollover()?;
         self.merge()?;
 
         let command = Command::set(key.clone(), value);
-        let location = self
-            .directory
-            .active_datafile
-            .location
-            .timed_location(command.timestamp());
-        self.key_locations.insert(key, location);
-        self.directory.active_datafile.write(&command)?;
+        let location = self.writer.write(&command)?;
+        self.locations.merge(key, location);
 
         Ok(())
     }
@@ -100,19 +118,12 @@ impl KvStore {
     /// # }
     /// ```
     pub fn get(&mut self, key: String) -> Result<Option<String>> {
-        match self.key_locations.get(&key) {
+        match self.locations.data.get(&key) {
             Some(location) => {
-                let location = location.loc;
-
-                let command = if location.id == self.directory.active_datafile.id {
-                    self.directory.active_datafile.read(&location)?
+                let command = if location.id == self.writer.id {
+                    self.writer.read(location)?
                 } else {
-                    let datafile = self
-                        .directory
-                        .readonly_datafiles
-                        .get(&location.id)
-                        .expect("readonly datafile must exist");
-                    datafile.read(&location)?
+                    LogReader::open(&self.path, location.id)?.read(location)?
                 };
 
                 Ok(command.value())
@@ -141,78 +152,64 @@ impl KvStore {
     /// # }
     /// ```
     pub fn remove(&mut self, key: String) -> Result<()> {
-        if self.key_locations.remove(&key).is_none() {
+        if self.locations.data.remove(&key).is_none() {
             return Err(KvError::KeyDoesNotExist(key));
         }
-
-        if self.should_rollover_active_datafile() {
-            self.directory.rollover_active_datafile();
-        }
-
-        self.directory
-            .active_datafile
-            .write(&Command::remove(key))?;
+        self.rollover()?;
+        self.writer.write(&Command::remove(key))?;
 
         Ok(())
     }
 
+    /// Determine whether merge process should be performing.
+    fn should_merge(&self) -> bool {
+        !self.merger.running() && self.readers.len() >= self.options.num_readonly_datafiles
+    }
+
+    /// Merging process.
     fn merge(&mut self) -> Result<()> {
-        self.gather_merge_result()?;
-        if self.should_merge_readonly_datafiles() {
-            self.start_merge_process()?;
+        self.gather_merged_result()?;
+        if self.should_merge() {
+            let readers: Vec<LogId> = self.readers.iter().cloned().collect();
+            self.merger.start(readers);
         }
         Ok(())
     }
 
     /// Gather merged result and modify existing key locations, directory.
-    fn gather_merge_result(&mut self) -> Result<()> {
+    fn gather_merged_result(&mut self) -> Result<()> {
         if let Ok(merge_info) = self.merger.result() {
             // transfer new key
-            for (key, location) in merge_info.key_locations {
-                merge_location(&mut self.key_locations, key, location)
+            for (key, location) in merge_info.locations.data {
+                self.locations.merge(key, location)
             }
 
             // remove old file ids
-            for file_id in merge_info.readonly_datafile_ids {
-                self.directory.remove_readonly_datafile(&file_id)?;
+            for id in &merge_info.reader_ids {
+                let reader_path = finder::reader_path(&self.path, id);
+                fs::remove_file(reader_path)?;
+                self.readers.remove(id);
             }
-
-            // set the new readonly file id pointing to `new_datafile`
-            self.directory.readonly_datafiles.insert(
-                merge_info.new_readonly_datafile_id,
-                self.directory
-                    .readonly_datafile(&merge_info.new_readonly_datafile_id),
-            );
         }
 
         Ok(())
     }
 
-    /// Start a merge process in the background.
-    fn start_merge_process(&mut self) -> Result<()> {
-        if !self.merger.running() {
-            // Prepare the merged file. If this file is failed to created,
-            // the merge process will be postpone until next time.
-            let new_datafile = self.directory.next_active_datafile()?;
-            let readonly_datafile_ids: Vec<FileId> =
-                self.directory.readonly_datafiles.keys().cloned().collect();
+    fn should_rollover(&self) -> bool {
+        self.writer.offset >= self.options.active_datafile_size
+    }
 
-            self.merger.start(
-                self.directory.path.clone(),
-                new_datafile,
-                readonly_datafile_ids,
-            );
+    fn rollover(&mut self) -> Result<()> {
+        if self.should_rollover() {
+            let writer_log_id = finder::next_log_id(&self.path);
+            let old_writer_log_id = self.writer.id;
+
+            let mut writer = LogReaderWriter::open(&self.path, writer_log_id)?;
+            std::mem::swap(&mut writer, &mut self.writer);
+
+            writer.transfer()?;
+            self.readers.insert(old_writer_log_id);
         }
-
         Ok(())
-    }
-
-    fn should_rollover_active_datafile(&self) -> bool {
-        self.directory.active_datafile.location.offset >= self.options.active_datafile_size
-    }
-
-    fn should_merge_readonly_datafiles(&self) -> bool {
-        self.directory.readonly_datafiles.len() >= self.options.num_readonly_datafiles
-            && !self.merger.running()
     }
 }

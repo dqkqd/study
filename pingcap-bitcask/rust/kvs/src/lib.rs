@@ -3,10 +3,9 @@
 #![deny(missing_docs)]
 
 mod command;
-mod datafile;
-mod directory;
 mod error;
 mod kvs;
+mod log;
 mod merger;
 mod options;
 pub use error::KvError;

@@ -299,3 +299,24 @@ fn compaction() -> Result<()> {
 
     panic!("No compaction detected");
 }
+
+#[test]
+fn merge_non_stop() -> Result<()> {
+    let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+    let mut store = KvStore::open(temp_dir.path())?;
+
+    for _ in 0..1000 {
+        for key_id in 0..100 {
+            let key = format!("key{}", key_id);
+            let value = format!("value{}", key_id);
+            store.set(key, value)?;
+        }
+
+        for key_id in 0..100 {
+            let key = format!("key{}", key_id);
+            assert_eq!(store.get(key)?, Some(format!("value{}", key_id)));
+        }
+    }
+
+    Ok(())
+}

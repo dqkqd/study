@@ -1,9 +1,10 @@
 use std::{
+    collections::BTreeMap,
     io::Read,
     time::{Duration, SystemTime},
 };
 
-use crate::error::Result;
+use crate::{error::Result, log::LogId};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -79,6 +80,35 @@ impl Command {
             } => *timestamp,
             Command::Remove { key: _, timestamp } => *timestamp,
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct CommandLocation {
+    pub id: LogId,
+    pub offset: usize,
+    pub timestamp: Duration,
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct CommandLocations {
+    pub data: BTreeMap<String, CommandLocation>,
+}
+
+impl CommandLocations {
+    pub fn new() -> CommandLocations {
+        CommandLocations::default()
+    }
+
+    pub fn merge(&mut self, key: String, location: CommandLocation) {
+        self.data
+            .entry(key)
+            .and_modify(|old_location| {
+                if old_location.timestamp < location.timestamp {
+                    *old_location = location;
+                }
+            })
+            .or_insert(location);
     }
 }
 
