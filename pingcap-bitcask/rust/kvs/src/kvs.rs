@@ -1,27 +1,22 @@
 use crate::{
     command::Command,
     datafile::TimedLocation,
-    directory::Directory,
+    directory::{Directory, FileId},
     error::{KvError, Result},
-    merger::{background_merge, merge_location},
+    merger::{merge_location, Merger},
     KvOption,
 };
-use std::{
-    collections::BTreeMap,
-    path::Path,
-    sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
-    thread,
-    time::Duration,
-};
+use std::{collections::BTreeMap, path::Path};
 
 pub(crate) type KeyLocations = BTreeMap<String, TimedLocation>;
 
 /// An on-disk key value store.
 #[derive(Debug)]
 pub struct KvStore {
-    directory: Arc<RwLock<Directory>>,
-    key_locations: Arc<RwLock<KeyLocations>>,
+    directory: Directory,
+    key_locations: KeyLocations,
     options: KvOption,
+    merger: Merger,
 }
 
 impl KvStore {
@@ -42,12 +37,11 @@ impl KvStore {
         }
 
         let store = KvStore {
-            directory: Arc::new(RwLock::new(directory)),
-            key_locations: Arc::new(RwLock::new(key_locations)),
+            directory,
+            key_locations,
             options,
+            merger: Merger::new(),
         };
-
-        store.start_background_merge_thread();
 
         Ok(store)
     }
@@ -69,24 +63,20 @@ impl KvStore {
     /// # }
     /// ```
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
+        if self.should_rollover_active_datafile() {
+            self.directory.rollover_active_datafile();
+        }
+
+        self.merge()?;
+
         let command = Command::set(key.clone(), value);
-
-        let location = {
-            let mut directory = write_lock(&self.directory)?;
-            if directory.active_datafile.location.offset >= self.options.active_datafile_size {
-                directory.rollover_active_datafile();
-            }
-            let location = directory
-                .active_datafile
-                .location
-                .timed_location(command.timestamp());
-            directory.active_datafile.write(&command)?;
-
-            location
-        };
-
-        let mut key_locations = write_lock(&self.key_locations)?;
-        merge_location(&mut key_locations, key, location);
+        let location = self
+            .directory
+            .active_datafile
+            .location
+            .timed_location(command.timestamp());
+        self.key_locations.insert(key, location);
+        self.directory.active_datafile.write(&command)?;
 
         Ok(())
     }
@@ -110,28 +100,25 @@ impl KvStore {
     /// # }
     /// ```
     pub fn get(&mut self, key: String) -> Result<Option<String>> {
-        let location = {
-            let key_locations = read_lock(&self.key_locations)?;
-            match key_locations.get(&key) {
-                Some(location) => location.loc,
-                None => {
-                    return Ok(None);
-                }
+        match self.key_locations.get(&key) {
+            Some(location) => {
+                let location = location.loc;
+
+                let command = if location.id == self.directory.active_datafile.id {
+                    self.directory.active_datafile.read(&location)?
+                } else {
+                    let datafile = self
+                        .directory
+                        .readonly_datafiles
+                        .get(&location.id)
+                        .expect("readonly datafile must exist");
+                    datafile.read(&location)?
+                };
+
+                Ok(command.value())
             }
-        };
-
-        let mut directory = write_lock(&self.directory)?;
-        let command = if location.id == directory.active_datafile.id {
-            directory.active_datafile.read(&location)?
-        } else {
-            let datafile = directory
-                .readonly_datafiles
-                .get(&location.id)
-                .expect("readonly datafile must exist");
-            datafile.read(&location)?
-        };
-
-        Ok(command.value())
+            None => Ok(None),
+        }
     }
 
     /// Remove a key from the store.
@@ -154,35 +141,78 @@ impl KvStore {
     /// # }
     /// ```
     pub fn remove(&mut self, key: String) -> Result<()> {
-        let mut key_locations = write_lock(&self.key_locations)?;
-        if key_locations.remove(&key).is_none() {
+        if self.key_locations.remove(&key).is_none() {
             return Err(KvError::KeyDoesNotExist(key));
         }
 
-        let mut directory = write_lock(&self.directory)?;
-        directory.active_datafile.write(&Command::remove(key))?;
+        if self.should_rollover_active_datafile() {
+            self.directory.rollover_active_datafile();
+        }
+
+        self.directory
+            .active_datafile
+            .write(&Command::remove(key))?;
 
         Ok(())
     }
 
-    fn start_background_merge_thread(&self) {
-        let directory = Arc::clone(&self.directory);
-        let key_locations = Arc::clone(&self.key_locations);
-        let options = self.options.clone();
-        thread::spawn(move || loop {
-            let _ = background_merge(&directory, &key_locations, options.clone());
-            thread::sleep(Duration::from_millis(500));
-        });
+    fn merge(&mut self) -> Result<()> {
+        self.gather_merge_result()?;
+        if self.should_merge_readonly_datafiles() {
+            self.start_merge_process()?;
+        }
+        Ok(())
     }
-}
 
-pub(crate) fn read_lock<T>(value: &Arc<RwLock<T>>) -> Result<RwLockReadGuard<'_, T>> {
-    value
-        .read()
-        .map_err(|_| KvError::Lock("cannot lock for read".to_owned()))
-}
-pub(crate) fn write_lock<T>(value: &Arc<RwLock<T>>) -> Result<RwLockWriteGuard<'_, T>> {
-    value
-        .write()
-        .map_err(|_| KvError::Lock("cannot lock for write".to_owned()))
+    /// Gather merged result and modify existing key locations, directory.
+    fn gather_merge_result(&mut self) -> Result<()> {
+        if let Ok(merge_info) = self.merger.result() {
+            // transfer new key
+            for (key, location) in merge_info.key_locations {
+                merge_location(&mut self.key_locations, key, location)
+            }
+
+            // remove old file ids
+            for file_id in merge_info.readonly_datafile_ids {
+                self.directory.remove_readonly_datafile(&file_id)?;
+            }
+
+            // set the new readonly file id pointing to `new_datafile`
+            self.directory.readonly_datafiles.insert(
+                merge_info.new_readonly_datafile_id,
+                self.directory
+                    .readonly_datafile(&merge_info.new_readonly_datafile_id),
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Start a merge process in the background.
+    fn start_merge_process(&mut self) -> Result<()> {
+        if !self.merger.running() {
+            // Prepare the merged file. If this file is failed to created,
+            // the merge process will be postpone until next time.
+            let new_datafile = self.directory.next_active_datafile()?;
+            let readonly_datafile_ids: Vec<FileId> =
+                self.directory.readonly_datafiles.keys().cloned().collect();
+
+            self.merger.start(
+                self.directory.path.clone(),
+                new_datafile,
+                readonly_datafile_ids,
+            );
+        }
+
+        Ok(())
+    }
+
+    fn should_rollover_active_datafile(&self) -> bool {
+        self.directory.active_datafile.location.offset >= self.options.active_datafile_size
+    }
+
+    fn should_merge_readonly_datafiles(&self) -> bool {
+        self.directory.readonly_datafiles.len() >= self.options.num_readonly_datafiles
+            && !self.merger.running()
+    }
 }

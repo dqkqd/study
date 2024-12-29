@@ -23,9 +23,6 @@ pub enum KvError {
 
     #[error("merge result not available")]
     MergeResultNotAvailable,
-
-    #[error("lock error: {0}")]
-    Lock(String),
 }
 
 /// Alias result to avoid duplication
