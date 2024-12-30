@@ -8,12 +8,14 @@ use std::{
 
 use super::protocol::{KvsRequest, KvsResponse};
 
+/// TODO: docs
 pub struct KvsClient {
     reader: BufReader<TcpStream>,
     writer: BufWriter<TcpStream>,
 }
 
 impl KvsClient {
+    /// TODO: docs
     pub fn open(address: SocketAddr) -> Result<KvsClient> {
         let stream = TcpStream::connect(address)?;
         let reader = BufReader::new(stream.try_clone()?);
@@ -25,6 +27,7 @@ impl KvsClient {
         Ok(client)
     }
 
+    /// TODO: docs
     pub fn send(&mut self, request: KvsRequest) -> Result<()> {
         info!(request = ?request, "sent request");
 
@@ -35,6 +38,7 @@ impl KvsClient {
         Ok(())
     }
 
+    /// TODO: docs
     pub fn recv(&mut self) -> Result<KvsResponse> {
         let response = KvsResponse::from_reader(&mut self.reader);
         info!(response = ?response, "received response");

@@ -12,7 +12,7 @@ mod options;
 mod parser;
 
 pub use error::{KvError, Result};
-pub use kvs::{KvStore, KvsEngine};
+pub use kvs::{KvStore, KvsEngine, Store};
 pub use options::KvOption;
 
 pub use net::client::KvsClient;

@@ -13,6 +13,8 @@ pub enum KvError {
     BsonDe(#[from] bson::de::Error),
     #[error("invalid pattern `{0}`")]
     GlobPattern(#[from] glob::PatternError),
+    #[error("sled error `{0}`")]
+    Sled(#[from] sled::Error),
 
     #[error("file id `{0}` does not exist")]
     FileIdDoesNotExist(u64),
@@ -28,6 +30,9 @@ pub enum KvError {
 
     #[error("unknown error")]
     Unknown,
+
+    #[error("Mismatch engine")]
+    MismatchEngine,
 }
 
 /// Alias result to avoid duplication

@@ -1,7 +1,7 @@
 use std::{env, io, net::SocketAddr};
 
 use clap::{Parser, ValueEnum};
-use kvs::{KvStore, KvsServer, Result};
+use kvs::{KvsServer, Result, Store};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -24,7 +24,11 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let current_dir = env::current_dir().expect("get current working directory");
-    let store = KvStore::open(current_dir)?;
+    let store = match cli.engine {
+        Engine::Kvs => Store::open_as_kvs(&current_dir)?,
+        Engine::Sled => Store::open_as_sled(&current_dir)?,
+    };
+
     let server = KvsServer::open(cli.addr, store)?;
 
     server.serve()?;

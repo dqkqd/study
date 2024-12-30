@@ -1,6 +1,6 @@
 use tracing::info;
 
-use crate::{parser::ByteParser, KvStore, KvsEngine, Result};
+use crate::{parser::ByteParser, KvsEngine, Result};
 use std::{
     cell::RefCell,
     io::{BufReader, BufWriter, Write},
@@ -9,13 +9,21 @@ use std::{
 
 use super::protocol::{KvsRequest, KvsResponse};
 
-pub struct KvsServer {
+/// TODO: docs
+pub struct KvsServer<E>
+where
+    E: KvsEngine,
+{
     listener: TcpListener,
-    store: RefCell<KvStore>,
+    store: RefCell<E>,
 }
 
-impl KvsServer {
-    pub fn open(address: SocketAddr, store: KvStore) -> Result<KvsServer> {
+impl<E> KvsServer<E>
+where
+    E: KvsEngine,
+{
+    /// TODO: docs
+    pub fn open(address: SocketAddr, store: E) -> Result<KvsServer<E>> {
         let listener = TcpListener::bind(address)?;
 
         let server = KvsServer {
@@ -27,6 +35,7 @@ impl KvsServer {
         Ok(server)
     }
 
+    /// TODO: docs
     pub fn serve(&self) -> Result<()> {
         info!("server serving");
 

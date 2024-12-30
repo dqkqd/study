@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use crate::parser::ByteParser;
 use crate::KvError;
 
+/// TODO: docs
+#[doc(hidden)]
 #[derive(Debug, Serialize, Deserialize)]
 pub enum KvsRequest {
     Set { key: String, value: String },
@@ -10,6 +12,8 @@ pub enum KvsRequest {
     Remove { key: String },
 }
 
+/// TODO: docs
+#[doc(hidden)]
 #[derive(Debug, Serialize, Deserialize)]
 pub enum KvsResponse {
     Ok(Option<String>),
