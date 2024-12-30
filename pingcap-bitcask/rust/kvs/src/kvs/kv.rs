@@ -17,10 +17,9 @@ use super::engine::KvsEngine;
 
 const DATA_FOLDER: &str = "kvstore";
 
-// TODO: hide
 /// An on-disk key value store.
 #[derive(Debug)]
-pub struct KvStore {
+pub(crate) struct KvStore {
     /// Path to the store.
     path: PathBuf,
 
@@ -52,7 +51,7 @@ impl KvStore {
     }
 
     /// Open database with provided options.
-    pub(crate) fn open_with_options<P: AsRef<Path>>(path: P, options: KvOption) -> Result<KvStore> {
+    pub fn open_with_options<P: AsRef<Path>>(path: P, options: KvOption) -> Result<KvStore> {
         let _ = fs::create_dir(&path);
 
         let mut locations = CommandLocations::new();
@@ -92,7 +91,7 @@ impl KvStore {
 
     /// Determine whether merge process should be performing.
     fn should_merge(&self) -> bool {
-        !self.merger.running() && self.readers.len() >= self.options.num_readonly_datafiles
+        !self.merger.running() && self.readers.len() >= self.options.num_readers
     }
 
     /// Merging process.
@@ -125,7 +124,7 @@ impl KvStore {
     }
 
     fn should_rollover(&self) -> bool {
-        self.writer.offset >= self.options.active_datafile_size
+        self.writer.offset >= self.options.writer_size
     }
 
     fn rollover(&mut self) -> Result<()> {
@@ -144,23 +143,6 @@ impl KvStore {
 }
 
 impl KvsEngine for KvStore {
-    /// Set a key with value to the store.
-    ///
-    /// # Examples
-    /// ```rust
-    /// # use kvs::KvsEngine;
-    /// # use kvs::KvStore;
-    /// # use kvs::Result;
-    /// # use tempfile::TempDir;
-    /// # fn main() -> Result<()> {
-    /// # let directory = TempDir::new().expect("unable to create temporary working directory");
-    /// let mut kvs = KvStore::open(&directory)?;
-    ///
-    /// kvs.set("key1".to_string(), "value1".to_string())?;
-    /// assert_eq!(kvs.get("key1".to_string())?, Some("value1".to_string()));
-    /// # Ok(())
-    /// # }
-    /// ```
     fn set(&mut self, key: String, value: String) -> Result<()> {
         self.rollover()?;
         self.merge()?;
@@ -172,25 +154,6 @@ impl KvsEngine for KvStore {
         Ok(())
     }
 
-    /// Get value of a key from the store.
-    ///
-    /// # Examples
-    /// ```rust
-    /// # use kvs::KvsEngine;
-    /// # use kvs::KvStore;
-    /// # use kvs::Result;
-    /// # use tempfile::TempDir;
-    /// # fn main() -> Result<()> {
-    /// # let directory = TempDir::new().expect("unable to create temporary working directory");
-    /// let mut kvs = KvStore::open(&directory)?;
-    ///
-    /// assert_eq!(kvs.get("key1".to_string())?, None);
-    ///
-    /// kvs.set("key1".to_string(), "value1".to_string())?;
-    /// assert_eq!(kvs.get("key1".to_string())?, Some("value1".to_string()));
-    /// # Ok(())
-    /// # }
-    /// ```
     fn get(&mut self, key: String) -> Result<Option<String>> {
         match self.locations.data.get(&key) {
             Some(location) => {
@@ -206,26 +169,6 @@ impl KvsEngine for KvStore {
         }
     }
 
-    /// Remove a key from the store.
-    ///
-    /// # Examples
-    /// ```rust
-    /// # use kvs::KvsEngine;
-    /// # use kvs::KvStore;
-    /// # use kvs::Result;
-    /// # use tempfile::TempDir;
-    /// # fn main() -> Result<()> {
-    /// # let directory = TempDir::new().expect("unable to create temporary working directory");
-    /// let mut kvs = KvStore::open(&directory)?;
-    ///
-    /// kvs.set("key1".to_string(), "value1".to_string())?;
-    /// assert_eq!(kvs.get("key1".to_string())?, Some("value1".to_string()));
-    ///
-    /// kvs.remove("key1".to_string())?;
-    /// assert_eq!(kvs.get("key1".to_string())?, None);
-    /// # Ok(())
-    /// # }
-    /// ```
     fn remove(&mut self, key: String) -> Result<()> {
         if self.locations.data.remove(&key).is_none() {
             return Err(KvError::KeyNotFound(key));

@@ -25,8 +25,8 @@ fn main() -> Result<()> {
 
     let current_dir = env::current_dir().expect("get current working directory");
     let store = match cli.engine {
-        Engine::Kvs => Store::open_as_kvs(&current_dir)?,
-        Engine::Sled => Store::open_as_sled(&current_dir)?,
+        Engine::Kvs => Store::open_with_kvs(&current_dir)?,
+        Engine::Sled => Store::open_with_sled(&current_dir)?,
     };
 
     let server = KvsServer::open(cli.addr, store)?;

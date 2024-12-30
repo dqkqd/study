@@ -9,7 +9,9 @@ use std::{
 
 use super::protocol::{KvsRequest, KvsResponse};
 
-/// TODO: docs
+/// Server directly interacts with on-disk database to serve clients' requests.
+///
+/// Database engine must implement [`KvsEngine`].
 pub struct KvsServer<E>
 where
     E: KvsEngine,
@@ -22,7 +24,21 @@ impl<E> KvsServer<E>
 where
     E: KvsEngine,
 {
-    /// TODO: docs
+    /// Open server at provided address.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use kvs::Result;
+    /// # use kvs::{KvsEngine, KvsServer, Store};
+    /// # use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+    /// # use tempfile::TempDir;
+    /// # fn main() -> Result<()> {
+    /// # let directory = TempDir::new().expect("unable to create temporary working directory");
+    /// let store = Store::open(&directory)?;
+    /// let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0);
+    /// let server = KvsServer::open(address, store)?;
+    /// # Ok(())
+    /// # }
     pub fn open(address: SocketAddr, store: E) -> Result<KvsServer<E>> {
         let listener = TcpListener::bind(address)?;
 
@@ -35,7 +51,7 @@ where
         Ok(server)
     }
 
-    /// TODO: docs
+    /// Start listening for incoming requests.
     pub fn serve(&self) -> Result<()> {
         info!("server serving");
 

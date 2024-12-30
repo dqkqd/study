@@ -32,7 +32,7 @@ fn main() -> Result<()> {
     tracing_subscriber::fmt().with_writer(io::stderr).init();
 
     let cli = Cli::parse();
-    let mut client = KvsClient::open(cli.addr)?;
+    let mut client = KvsClient::connect(cli.addr)?;
 
     match cli.command {
         CliCommands::Set { key, value } => {

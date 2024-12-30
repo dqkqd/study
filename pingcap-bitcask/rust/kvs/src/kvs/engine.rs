@@ -1,11 +1,13 @@
 use crate::Result;
 
-/// TODO: docs
+/// Trait for database engine.
+///
+/// Engine must implement this to talk with [KvsServer][`crate::KvsServer`].
 pub trait KvsEngine {
-    /// TODO: docs
+    /// Set a key with value to the store.
     fn set(&mut self, key: String, value: String) -> Result<()>;
-    /// TODO: docs
+    /// Get value of a key from the store.
     fn get(&mut self, key: String) -> Result<Option<String>>;
-    /// TODO: docs
+    /// Remove a key from the store.
     fn remove(&mut self, key: String) -> Result<()>;
 }

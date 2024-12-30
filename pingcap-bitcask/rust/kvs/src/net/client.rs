@@ -8,15 +8,31 @@ use std::{
 
 use super::protocol::{KvsRequest, KvsResponse};
 
-/// TODO: docs
+/// Client that can talk with sever through internal network protocol.
 pub struct KvsClient {
     reader: BufReader<TcpStream>,
     writer: BufWriter<TcpStream>,
 }
 
 impl KvsClient {
-    /// TODO: docs
-    pub fn open(address: SocketAddr) -> Result<KvsClient> {
+    /// Connect to server at specific address.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use kvs::Result;
+    /// # use kvs::{KvsClient, KvsEngine, KvsServer, Store};
+    /// # use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+    /// # use tempfile::TempDir;
+    /// # fn main() -> Result<()> {
+    /// # let directory = TempDir::new().expect("unable to create temporary working directory");
+    /// # let store = Store::open(&directory)?;
+    /// # let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0);
+    /// let server = KvsServer::open(address, store)?;
+    /// server.serve()?;
+    /// let client = KvsClient::connect(address)?;
+    /// # Ok(())
+    /// # }
+    pub fn connect(address: SocketAddr) -> Result<KvsClient> {
         let stream = TcpStream::connect(address)?;
         let reader = BufReader::new(stream.try_clone()?);
         let writer = BufWriter::new(stream);
@@ -27,7 +43,7 @@ impl KvsClient {
         Ok(client)
     }
 
-    /// TODO: docs
+    /// Send a request to server.
     pub fn send(&mut self, request: KvsRequest) -> Result<()> {
         info!(request = ?request, "sent request");
 
@@ -38,7 +54,7 @@ impl KvsClient {
         Ok(())
     }
 
-    /// TODO: docs
+    /// Get a response from server.
     pub fn recv(&mut self) -> Result<KvsResponse> {
         let response = KvsResponse::from_reader(&mut self.reader);
         info!(response = ?response, "received response");

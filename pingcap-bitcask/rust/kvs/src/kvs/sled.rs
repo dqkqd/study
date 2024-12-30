@@ -8,7 +8,8 @@ use crate::{KvError, Result};
 
 const DATA_FOLDER: &str = "sledstore";
 
-pub struct SledKvsEngine {
+/// Wrapper for sled db engine.
+pub(crate) struct SledKvsEngine {
     db: sled::Db,
 }
 
@@ -18,6 +19,7 @@ impl SledKvsEngine {
         path.as_ref().join(DATA_FOLDER)
     }
 
+    /// Open sled db at specific path.
     pub fn open<P: AsRef<Path>>(path: P) -> Result<SledKvsEngine> {
         let dbpath = SledKvsEngine::dbpath(path);
         let db = sled::open(&dbpath)?;

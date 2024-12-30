@@ -1,23 +1,18 @@
-use std::path::Path;
-
-use crate::KvStore;
-use crate::Result;
-
 /// Provide database configuration.
 #[derive(Debug, Clone)]
 pub struct KvOption {
-    /// Number of readonly files before starting to merge
-    pub(crate) num_readonly_datafiles: usize,
+    /// Maximum number of readonly log files.
+    pub(crate) num_readers: usize,
 
-    /// Datafile size in bytes
-    pub(crate) active_datafile_size: usize,
+    /// Maximum writer size in bytes.
+    pub(crate) writer_size: usize,
 }
 
 impl Default for KvOption {
     fn default() -> KvOption {
         KvOption {
-            num_readonly_datafiles: 10,
-            active_datafile_size: 1024 * 1024, // 1 Mb
+            num_readers: 10,
+            writer_size: 1024 * 1024, // 1 Mb
         }
     }
 }
@@ -28,20 +23,15 @@ impl KvOption {
         KvOption::default()
     }
 
-    /// Set number of readonly datafiles allowed.
-    pub fn num_readonly_datafiles(&mut self, num_readonly_datafiles: usize) -> &mut KvOption {
-        self.num_readonly_datafiles = num_readonly_datafiles;
+    /// Set the maximum number of readonly log files.
+    pub fn num_log_readers(&mut self, num_readonly_datafiles: usize) -> &mut KvOption {
+        self.num_readers = num_readonly_datafiles;
         self
     }
 
-    /// Set number of readonly datafiles allowed.
-    pub fn active_datafile_size(&mut self, active_datafile_size: usize) -> &mut KvOption {
-        self.active_datafile_size = active_datafile_size;
+    /// Set the maximum size of the writer.
+    pub fn writer_size(&mut self, active_datafile_size: usize) -> &mut KvOption {
+        self.writer_size = active_datafile_size;
         self
-    }
-
-    /// Open database with specific options.
-    pub fn open<P: AsRef<Path>>(&self, path: P) -> Result<KvStore> {
-        KvStore::open_with_options(path, self.clone())
     }
 }

@@ -11,10 +11,19 @@ mod net;
 mod options;
 mod parser;
 
-pub use error::{KvError, Result};
-pub use kvs::{KvStore, KvsEngine, Store};
+pub use kvs::Store;
+#[doc(hidden)]
+pub use kvs::Store as KvStore;
+
+pub use kvs::KvsEngine;
+
 pub use options::KvOption;
 
+#[doc(hidden)]
+pub use error::{KvError, Result};
+
 pub use net::client::KvsClient;
-pub use net::protocol::{KvsRequest, KvsResponse};
 pub use net::server::KvsServer;
+
+#[doc(hidden)]
+pub use net::protocol::{KvsRequest, KvsResponse};
