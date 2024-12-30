@@ -12,6 +12,14 @@ edition = "2018"
 path = "src/lib.rs"
 crate-type = ["lib"]
 
+[[bin]]
+name = "kvs-client"
+path = "src/bin/kvs_client.rs"
+
+[[bin]]
+name = "kvs-server"
+path = "src/bin/kvs_server.rs"
+
 [dev-dependencies]
 assert_cmd = "2.0.16"
 predicates = "3.1.2"

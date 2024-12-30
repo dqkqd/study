@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, net::SocketAddr};
 
 use clap::{Parser, Subcommand};
 use kvs::{KvsEngine, Result};
@@ -8,6 +8,9 @@ use kvs::{KvsEngine, Result};
 struct Cli {
     #[command(subcommand)]
     command: Commands,
+
+    #[arg(long, global = true, default_value = "127.0.0.1:4000")]
+    addr: SocketAddr,
 }
 
 #[derive(Subcommand, Debug)]
