@@ -10,6 +10,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use super::engine::KvsEngine;
+
 /// An on-disk key value store.
 #[derive(Debug)]
 pub struct KvStore {
@@ -72,95 +74,6 @@ impl KvStore {
         Ok(store)
     }
 
-    /// Set a key with value to the store.
-    ///
-    /// # Examples
-    /// ```rust
-    /// # use kvs::KvStore;
-    /// # use kvs::Result;
-    /// # use tempfile::TempDir;
-    /// # fn main() -> Result<()> {
-    /// # let directory = TempDir::new().expect("unable to create temporary working directory");
-    /// let mut kvs = KvStore::open(&directory)?;
-    ///
-    /// kvs.set("key1".to_string(), "value1".to_string())?;
-    /// assert_eq!(kvs.get("key1".to_string())?, Some("value1".to_string()));
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn set(&mut self, key: String, value: String) -> Result<()> {
-        self.rollover()?;
-        self.merge()?;
-
-        let command = Command::set(key.clone(), value);
-        let location = self.writer.write(&command)?;
-        self.locations.merge(key, location);
-
-        Ok(())
-    }
-
-    /// Get value of a key from the store.
-    ///
-    /// # Examples
-    /// ```rust
-    /// # use kvs::KvStore;
-    /// # use kvs::Result;
-    /// # use tempfile::TempDir;
-    /// # fn main() -> Result<()> {
-    /// # let directory = TempDir::new().expect("unable to create temporary working directory");
-    /// let mut kvs = KvStore::open(&directory)?;
-    ///
-    /// assert_eq!(kvs.get("key1".to_string())?, None);
-    ///
-    /// kvs.set("key1".to_string(), "value1".to_string())?;
-    /// assert_eq!(kvs.get("key1".to_string())?, Some("value1".to_string()));
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn get(&mut self, key: String) -> Result<Option<String>> {
-        match self.locations.data.get(&key) {
-            Some(location) => {
-                let command = if location.id == self.writer.id {
-                    self.writer.read(location)?
-                } else {
-                    LogReader::open(&self.path, location.id)?.read(location)?
-                };
-
-                Ok(command.value())
-            }
-            None => Ok(None),
-        }
-    }
-
-    /// Remove a key from the store.
-    ///
-    /// # Examples
-    /// ```rust
-    /// # use kvs::KvStore;
-    /// # use kvs::Result;
-    /// # use tempfile::TempDir;
-    /// # fn main() -> Result<()> {
-    /// # let directory = TempDir::new().expect("unable to create temporary working directory");
-    /// let mut kvs = KvStore::open(&directory)?;
-    ///
-    /// kvs.set("key1".to_string(), "value1".to_string())?;
-    /// assert_eq!(kvs.get("key1".to_string())?, Some("value1".to_string()));
-    ///
-    /// kvs.remove("key1".to_string())?;
-    /// assert_eq!(kvs.get("key1".to_string())?, None);
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn remove(&mut self, key: String) -> Result<()> {
-        if self.locations.data.remove(&key).is_none() {
-            return Err(KvError::KeyDoesNotExist(key));
-        }
-        self.rollover()?;
-        self.writer.write(&Command::remove(key))?;
-
-        Ok(())
-    }
-
     /// Determine whether merge process should be performing.
     fn should_merge(&self) -> bool {
         !self.merger.running() && self.readers.len() >= self.options.num_readonly_datafiles
@@ -210,6 +123,97 @@ impl KvStore {
             writer.transfer()?;
             self.readers.insert(old_writer_log_id);
         }
+        Ok(())
+    }
+}
+
+impl KvsEngine for KvStore {
+    /// Set a key with value to the store.
+    ///
+    /// # Examples
+    /// ```rust
+    /// # use kvs::KvStore;
+    /// # use kvs::Result;
+    /// # use tempfile::TempDir;
+    /// # fn main() -> Result<()> {
+    /// # let directory = TempDir::new().expect("unable to create temporary working directory");
+    /// let mut kvs = KvStore::open(&directory)?;
+    ///
+    /// kvs.set("key1".to_string(), "value1".to_string())?;
+    /// assert_eq!(kvs.get("key1".to_string())?, Some("value1".to_string()));
+    /// # Ok(())
+    /// # }
+    /// ```
+    fn set(&mut self, key: String, value: String) -> Result<()> {
+        self.rollover()?;
+        self.merge()?;
+
+        let command = Command::set(key.clone(), value);
+        let location = self.writer.write(&command)?;
+        self.locations.merge(key, location);
+
+        Ok(())
+    }
+
+    /// Get value of a key from the store.
+    ///
+    /// # Examples
+    /// ```rust
+    /// # use kvs::KvStore;
+    /// # use kvs::Result;
+    /// # use tempfile::TempDir;
+    /// # fn main() -> Result<()> {
+    /// # let directory = TempDir::new().expect("unable to create temporary working directory");
+    /// let mut kvs = KvStore::open(&directory)?;
+    ///
+    /// assert_eq!(kvs.get("key1".to_string())?, None);
+    ///
+    /// kvs.set("key1".to_string(), "value1".to_string())?;
+    /// assert_eq!(kvs.get("key1".to_string())?, Some("value1".to_string()));
+    /// # Ok(())
+    /// # }
+    /// ```
+    fn get(&mut self, key: String) -> Result<Option<String>> {
+        match self.locations.data.get(&key) {
+            Some(location) => {
+                let command = if location.id == self.writer.id {
+                    self.writer.read(location)?
+                } else {
+                    LogReader::open(&self.path, location.id)?.read(location)?
+                };
+
+                Ok(command.value())
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Remove a key from the store.
+    ///
+    /// # Examples
+    /// ```rust
+    /// # use kvs::KvStore;
+    /// # use kvs::Result;
+    /// # use tempfile::TempDir;
+    /// # fn main() -> Result<()> {
+    /// # let directory = TempDir::new().expect("unable to create temporary working directory");
+    /// let mut kvs = KvStore::open(&directory)?;
+    ///
+    /// kvs.set("key1".to_string(), "value1".to_string())?;
+    /// assert_eq!(kvs.get("key1".to_string())?, Some("value1".to_string()));
+    ///
+    /// kvs.remove("key1".to_string())?;
+    /// assert_eq!(kvs.get("key1".to_string())?, None);
+    /// # Ok(())
+    /// # }
+    /// ```
+    fn remove(&mut self, key: String) -> Result<()> {
+        if self.locations.data.remove(&key).is_none() {
+            return Err(KvError::KeyDoesNotExist(key));
+        }
+        self.rollover()?;
+        self.writer.write(&Command::remove(key))?;
+
         Ok(())
     }
 }

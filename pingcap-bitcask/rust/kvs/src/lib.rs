@@ -10,5 +10,5 @@ mod merger;
 mod options;
 pub use error::KvError;
 pub use error::Result;
-pub use kvs::KvStore;
+pub use kvs::{KvStore, KvsEngine};
 pub use options::KvOption;

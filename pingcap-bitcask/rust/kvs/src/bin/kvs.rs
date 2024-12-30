@@ -1,7 +1,7 @@
 use std::env;
 
 use clap::{Parser, Subcommand};
-use kvs::Result;
+use kvs::{KvsEngine, Result};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
