@@ -16,8 +16,8 @@ pub enum KvError {
 
     #[error("file id `{0}` does not exist")]
     FileIdDoesNotExist(u64),
-    #[error("key `{0}` does not exist")]
-    KeyDoesNotExist(String),
+    #[error("Key not found `{0}`")]
+    KeyNotFound(String),
     #[error("cannot write bytes length `{0}`")]
     CannotWriteLen(usize),
     #[error("cannot transfer active log file, err: `{0}`")]
@@ -25,6 +25,9 @@ pub enum KvError {
 
     #[error("merge result not available")]
     MergeResultNotAvailable,
+
+    #[error("unknown error")]
+    Unknown,
 }
 
 /// Alias result to avoid duplication

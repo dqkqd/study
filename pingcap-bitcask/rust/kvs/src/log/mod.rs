@@ -2,6 +2,7 @@ use std::io::{BufReader, Read, Seek};
 
 use crate::{
     command::{Command, CommandLocation},
+    parser::ByteParser,
     Result,
 };
 

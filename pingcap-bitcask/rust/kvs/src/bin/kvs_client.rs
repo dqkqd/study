@@ -1,20 +1,20 @@
-use std::{env, net::SocketAddr};
+use std::{io, net::SocketAddr};
 
 use clap::{Parser, Subcommand};
-use kvs::{KvsEngine, Result};
+use kvs::{KvsClient, KvsRequest, Result};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Cli {
     #[command(subcommand)]
-    command: Commands,
+    command: CliCommands,
 
     #[arg(long, global = true, default_value = "127.0.0.1:4000")]
     addr: SocketAddr,
 }
 
 #[derive(Subcommand, Debug)]
-enum Commands {
+enum CliCommands {
     Set {
         key: String,
         value: String,
@@ -29,30 +29,39 @@ enum Commands {
 }
 
 fn main() -> Result<()> {
-    let cli = Cli::parse();
+    tracing_subscriber::fmt().with_writer(io::stderr).init();
 
-    let current_dir = env::current_dir().expect("get current working directory");
-    let mut kvs = kvs::KvStore::open(current_dir)?;
+    let cli = Cli::parse();
+    let mut client = KvsClient::open(cli.addr)?;
 
     match cli.command {
-        Commands::Set { key, value } => {
-            kvs.set(key, value)?;
-        }
-        Commands::Get { key } => {
-            let value = kvs.get(key)?;
-            match value {
-                Some(value) => println!("{}", value),
-                None => println!("Key not found"),
+        CliCommands::Set { key, value } => {
+            client.send(KvsRequest::Set { key, value })?;
+            let resp = client.recv()?;
+            if !matches!(resp, kvs::KvsResponse::Ok(_)) {
+                return Err(kvs::KvError::Unknown);
             }
         }
-        Commands::Remove { key } => {
-            if let Err(err) = kvs.remove(key) {
-                if matches!(err, kvs::KvError::KeyDoesNotExist(_)) {
-                    println!("Key not found");
+        CliCommands::Get { key } => {
+            client.send(KvsRequest::Get { key })?;
+            match client.recv()? {
+                kvs::KvsResponse::Ok(Some(v)) => println!("{v}"),
+                kvs::KvsResponse::Ok(None) => println!("Key not found"),
+                _ => return Err(kvs::KvError::Unknown),
+            }
+        }
+        CliCommands::Remove { key } => {
+            client.send(KvsRequest::Remove { key })?;
+            match client.recv()? {
+                kvs::KvsResponse::Ok(_) => {}
+                kvs::KvsResponse::KeyNotFound(key) => {
+                    eprintln!("Key not found");
+                    return Err(kvs::KvError::KeyNotFound(key));
                 }
-                return Err(err);
+                _ => return Err(kvs::KvError::Unknown),
             }
         }
     }
+
     Ok(())
 }

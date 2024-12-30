@@ -1,3 +1,6 @@
+use clap::crate_version;
+use tracing::info;
+
 use crate::{
     command::{Command, CommandLocations},
     log::{finder, LogId, LogRead, LogReader, LogReaderWriter, LogWrite},
@@ -71,6 +74,8 @@ impl KvStore {
             merger,
         };
 
+        info!(version = crate_version!(), database_path = %store.path.display(), "opened database:");
+
         Ok(store)
     }
 
@@ -132,6 +137,7 @@ impl KvsEngine for KvStore {
     ///
     /// # Examples
     /// ```rust
+    /// # use kvs::KvsEngine;
     /// # use kvs::KvStore;
     /// # use kvs::Result;
     /// # use tempfile::TempDir;
@@ -159,6 +165,7 @@ impl KvsEngine for KvStore {
     ///
     /// # Examples
     /// ```rust
+    /// # use kvs::KvsEngine;
     /// # use kvs::KvStore;
     /// # use kvs::Result;
     /// # use tempfile::TempDir;
@@ -192,6 +199,7 @@ impl KvsEngine for KvStore {
     ///
     /// # Examples
     /// ```rust
+    /// # use kvs::KvsEngine;
     /// # use kvs::KvStore;
     /// # use kvs::Result;
     /// # use tempfile::TempDir;
@@ -209,7 +217,7 @@ impl KvsEngine for KvStore {
     /// ```
     fn remove(&mut self, key: String) -> Result<()> {
         if self.locations.data.remove(&key).is_none() {
-            return Err(KvError::KeyDoesNotExist(key));
+            return Err(KvError::KeyNotFound(key));
         }
         self.rollover()?;
         self.writer.write(&Command::remove(key))?;

@@ -6,6 +6,7 @@ use std::{
 
 use crate::{
     command::{Command, CommandLocation},
+    parser::ByteParser,
     KvError, Result,
 };
 
@@ -61,6 +62,7 @@ where
         };
 
         self.offset += n;
+        self.writer.flush()?;
 
         Ok(location)
     }

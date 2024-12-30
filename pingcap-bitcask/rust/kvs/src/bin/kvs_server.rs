@@ -1,8 +1,7 @@
 use std::{env, io, net::SocketAddr};
 
-use clap::{crate_version, Parser, ValueEnum};
-use kvs::Result;
-use tracing::info;
+use clap::{Parser, ValueEnum};
+use kvs::{KvStore, KvsServer, Result};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -23,11 +22,12 @@ fn main() -> Result<()> {
     tracing_subscriber::fmt().with_writer(io::stderr).init();
 
     let cli = Cli::parse();
-    let current_dir = env::current_dir().expect("get current working directory");
-    let _ = kvs::KvStore::open(current_dir)?;
-    let version = crate_version!();
 
-    info!(version = version, addr = %cli.addr, engine= ?cli.engine,  "opened database");
+    let current_dir = env::current_dir().expect("get current working directory");
+    let store = KvStore::open(current_dir)?;
+    let server = KvsServer::open(cli.addr, store)?;
+
+    server.serve()?;
 
     Ok(())
 }

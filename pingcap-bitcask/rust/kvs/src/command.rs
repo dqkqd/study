@@ -1,10 +1,9 @@
 use std::{
     collections::BTreeMap,
-    io::Read,
     time::{Duration, SystemTime},
 };
 
-use crate::{error::Result, log::LogId};
+use crate::{log::LogId, parser::ByteParser};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -20,6 +19,8 @@ pub(crate) enum Command {
     },
 }
 
+impl ByteParser for Command {}
+
 impl Command {
     pub fn set(key: String, value: String) -> Command {
         Command::Set {
@@ -34,19 +35,6 @@ impl Command {
             key,
             timestamp: current_timestamp(),
         }
-    }
-
-    pub fn to_bytes(&self) -> Result<Vec<u8>> {
-        let v = bson::to_vec(&self)?;
-        Ok(v)
-    }
-
-    pub fn from_reader<R>(mut reader: R) -> Result<Command>
-    where
-        R: Read,
-    {
-        let command = bson::from_reader(&mut reader)?;
-        Ok(command)
     }
 
     pub fn key(&self) -> String {
