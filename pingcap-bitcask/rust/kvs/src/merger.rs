@@ -1,20 +1,13 @@
 use std::{
     path::{Path, PathBuf},
-    sync::mpsc,
-    thread,
+    thread::{self, JoinHandle},
 };
 
 use crate::{
     command::CommandLocations,
     log::{finder, LogId, LogRead, LogReader, LogReaderWriter, LogWrite},
-    KvError, Result,
+    Result,
 };
-
-#[derive(Debug)]
-enum Status {
-    Free,
-    Running,
-}
 
 #[derive(Debug)]
 pub(crate) struct MergeInfo {
@@ -27,48 +20,35 @@ type MergeResult = Result<MergeInfo>;
 #[derive(Debug)]
 pub(crate) struct Merger {
     path: PathBuf,
-    sender: mpsc::Sender<MergeResult>,
-    receiver: mpsc::Receiver<MergeResult>,
-    status: Status,
+    job: Option<JoinHandle<MergeResult>>,
 }
 
 impl Merger {
     pub fn new<P: AsRef<Path>>(path: P) -> Merger {
         let path = path.as_ref().to_path_buf();
-        let (sender, receiver) = mpsc::channel();
-
-        Merger {
-            path,
-            sender,
-            receiver,
-            status: Status::Free,
-        }
+        Merger { path, job: None }
     }
 
     pub fn running(&self) -> bool {
-        matches!(self.status, Status::Running)
+        self.job.as_ref().is_some_and(|j| !j.is_finished())
     }
-    pub fn start(&mut self, reader_ids: Vec<LogId>) {
-        if self.running() {
-            return;
+
+    pub fn merge(&mut self, reader_ids: Vec<LogId>) {
+        if !self.running() {
+            let path = self.path.clone();
+            self.job = Some(thread::spawn(move || merge(&path, reader_ids)));
         }
-        self.status = Status::Running;
-
-        let sender = self.sender.clone();
-        let path = self.path.clone();
-        thread::spawn(move || {
-            let res = merge(&path, reader_ids);
-            let _ = sender.send(res);
-        });
     }
 
-    pub fn result(&mut self) -> MergeResult {
-        let res = self
-            .receiver
-            .try_recv()
-            .map_err(|_| KvError::MergeResultNotAvailable)?;
-        self.status = Status::Free;
-        res
+    pub fn result(&mut self) -> Option<MergeResult> {
+        let finished = self.job.as_ref().is_some_and(|j| j.is_finished());
+
+        if finished {
+            let job = std::mem::take(&mut self.job);
+            job.and_then(|j| j.join().ok())
+        } else {
+            None
+        }
     }
 }
 

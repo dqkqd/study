@@ -99,14 +99,14 @@ impl KvStore {
         self.gather_merged_result()?;
         if self.should_merge() {
             let readers: Vec<LogId> = self.readers.iter().cloned().collect();
-            self.merger.start(readers);
+            self.merger.merge(readers);
         }
         Ok(())
     }
 
     /// Gather merged result and modify existing key locations, directory.
     fn gather_merged_result(&mut self) -> Result<()> {
-        if let Ok(merge_info) = self.merger.result() {
+        if let Some(Ok(merge_info)) = self.merger.result() {
             // transfer new key
             for (key, location) in merge_info.locations.data {
                 self.locations.merge(key, location)
