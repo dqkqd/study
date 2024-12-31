@@ -20,9 +20,16 @@ path = "src/bin/kvs_client.rs"
 name = "kvs-server"
 path = "src/bin/kvs_server.rs"
 
+[[bench]]
+name = "benches"
+harness = false
+
 [dev-dependencies]
 assert_cmd = "2.0.16"
+criterion = "0.5.1"
 predicates = "3.1.2"
+rand = { version = "0.8.5" }
+rand_chacha = "0.3.1"
 tempfile = "3.14.0"
 walkdir = "2.5.0"
 
