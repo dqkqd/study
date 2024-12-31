@@ -10,6 +10,7 @@ mod merger;
 mod net;
 mod options;
 mod parser;
+mod pool;
 
 pub use kvs::Store;
 #[doc(hidden)]
