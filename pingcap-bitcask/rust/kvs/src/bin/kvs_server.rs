@@ -1,7 +1,7 @@
 use std::{env, io, net::SocketAddr};
 
 use clap::{Parser, ValueEnum};
-use kvs::{KvsServer, Result, Store};
+use kvs::{thread_pool, thread_pool::ThreadPool, KvsServer, Result, Store};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -29,7 +29,8 @@ fn main() -> Result<()> {
         Engine::Sled => Store::open_with_sled(&current_dir)?,
     };
 
-    let server = KvsServer::open(cli.addr, store)?;
+    let pool = thread_pool::NaiveThreadPool::new(1)?;
+    let server = KvsServer::open(cli.addr, store, pool)?;
 
     server.serve()?;
 

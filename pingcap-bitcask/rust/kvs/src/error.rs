@@ -25,14 +25,16 @@ pub enum KvError {
     #[error("cannot transfer active log file, err: `{0}`")]
     CannotTransferActiveLog(String),
 
-    #[error("merge result not available")]
-    MergeResultNotAvailable,
-
     #[error("unknown error")]
     Unknown,
 
-    #[error("Mismatch engine")]
+    #[error("mismatch engine")]
     MismatchEngine,
+
+    #[error("cannot read shared data `{0}`")]
+    SharedRead(String),
+    #[error("cannot write shared data `{0}`")]
+    SharedWrite(String),
 }
 
 /// Alias result to avoid duplication

@@ -72,7 +72,7 @@ fn write(c: &mut Criterion) {
             |b, &store_type| {
                 b.iter(|| {
                     // Store must be re-crated in different folder.
-                    let (mut store, _temp_dir) = store_type.store();
+                    let (store, _temp_dir) = store_type.store();
                     for (k, v) in write_sample.clone() {
                         store.set(k, v).unwrap();
                     }
@@ -96,7 +96,7 @@ fn read(c: &mut Criterion) {
 
     for store_type in [StoreType::Kvs, StoreType::Sled].iter() {
         // The same store is used for reading.
-        let (mut store, _temp_dir) = store_type.store();
+        let (store, _temp_dir) = store_type.store();
         for (k, v) in write_sample.clone() {
             store.set(k, v).unwrap();
         }

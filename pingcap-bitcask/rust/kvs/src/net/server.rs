@@ -1,8 +1,7 @@
 use tracing::info;
 
-use crate::{parser::ByteParser, KvsEngine, Result};
+use crate::{parser::ByteParser, thread_pool::ThreadPool, KvsEngine, Result};
 use std::{
-    cell::RefCell,
     io::{BufReader, BufWriter, Write},
     net::{SocketAddr, TcpListener, TcpStream},
 };
@@ -12,17 +11,20 @@ use super::protocol::{KvsRequest, KvsResponse};
 /// Server directly interacts with on-disk database to serve clients' requests.
 ///
 /// Database engine must implement [`KvsEngine`].
-pub struct KvsServer<E>
+pub struct KvsServer<E, P>
 where
     E: KvsEngine,
+    P: ThreadPool,
 {
     listener: TcpListener,
-    store: RefCell<E>,
+    store: E,
+    pool: P,
 }
 
-impl<E> KvsServer<E>
+impl<E, P> KvsServer<E, P>
 where
     E: KvsEngine,
+    P: ThreadPool,
 {
     /// Open server at provided address.
     ///
@@ -39,12 +41,13 @@ where
     /// let server = KvsServer::open(address, store)?;
     /// # Ok(())
     /// # }
-    pub fn open(address: SocketAddr, store: E) -> Result<KvsServer<E>> {
+    pub fn open(address: SocketAddr, store: E, pool: P) -> Result<KvsServer<E, P>> {
         let listener = TcpListener::bind(address)?;
 
         let server = KvsServer {
             listener,
-            store: RefCell::new(store),
+            store,
+            pool,
         };
         info!(addr = %address,  "server started");
 
@@ -57,70 +60,71 @@ where
 
         for stream in self.listener.incoming() {
             let stream = stream?;
-            self.handle_connection(stream)?;
+            let store = self.store.clone();
+            self.pool.spawn(move || {
+                let _ = handle_connection(store, stream);
+            })
         }
 
         Ok(())
     }
+}
 
-    fn handle_connection(&self, stream: TcpStream) -> Result<()> {
-        let mut reader = BufReader::new(stream.try_clone()?);
-        let mut writer = BufWriter::new(stream.try_clone()?);
+fn handle_connection<E: KvsEngine>(store: E, stream: TcpStream) -> Result<()> {
+    let mut reader = BufReader::new(&stream);
+    let mut writer = BufWriter::new(&stream);
 
-        info!(peer = %stream.peer_addr().unwrap(), "connection accepted:");
+    info!(peer = %stream.peer_addr().unwrap(), "connection accepted:");
 
-        loop {
-            let request = KvsRequest::from_reader(&mut reader);
-            info!(request = ?request, "request:");
+    loop {
+        let request = KvsRequest::from_reader(&mut reader);
+        info!(request = ?request, "request:");
 
-            let response = match request {
-                Ok(request) => self.handle_request(request),
-                Err(e) => KvsResponse::InvalidCommand(e.to_string()),
-            };
+        let response = match request {
+            Ok(request) => handle_request(&store, request),
+            Err(e) => KvsResponse::InvalidCommand(e.to_string()),
+        };
 
-            let bytes = response.to_bytes().unwrap_or_else(|_| {
-                KvsResponse::ServerError
-                    .to_bytes()
-                    .expect("parser simple response")
-            });
+        let bytes = response.to_bytes().unwrap_or_else(|_| {
+            KvsResponse::ServerError
+                .to_bytes()
+                .expect("parser simple response")
+        });
 
-            // check connection before writing
-            if stream.peer_addr().is_err() {
-                break;
-            }
-            writer.write_all(&bytes)?;
-            writer.flush()?;
+        // check connection before writing
+        if stream.peer_addr().is_err() {
+            break;
         }
-
-        Ok(())
+        writer.write_all(&bytes)?;
+        writer.flush()?;
     }
 
-    fn handle_request(&self, request: KvsRequest) -> KvsResponse {
-        let mut store = self.store.borrow_mut();
+    Ok(())
+}
 
-        let res = match request {
-            KvsRequest::Get { key } => store
-                .get(key.clone())
-                .map(KvsResponse::Ok)
-                .map_err(KvsResponse::from),
+fn handle_request<E: KvsEngine>(store: &E, request: KvsRequest) -> KvsResponse {
+    let res = match request {
+        KvsRequest::Get { key } => store
+            .get(key.clone())
+            .map(KvsResponse::Ok)
+            .map_err(KvsResponse::from),
 
-            KvsRequest::Set { key, value } => store
-                .set(key, value)
-                .map(|_| KvsResponse::Ok(None))
-                .map_err(KvsResponse::from),
+        KvsRequest::Set { key, value } => store
+            .set(key, value)
+            .map(|_| KvsResponse::Ok(None))
+            .map_err(KvsResponse::from),
 
-            KvsRequest::Remove { key } => store
-                .remove(key)
-                .map(|_| KvsResponse::Ok(None))
-                .map_err(KvsResponse::from),
-        };
+        KvsRequest::Remove { key } => store
+            .remove(key)
+            .map(|_| KvsResponse::Ok(None))
+            .map_err(KvsResponse::from),
+    };
 
-        let res = match res {
-            Ok(res) => res,
-            Err(res) => res,
-        };
-        info!(res = ?res, "response:");
+    let res = match res {
+        Ok(res) => res,
+        Err(res) => res,
+    };
+    info!(res = ?res, "response:");
 
-        res
-    }
+    res
 }

@@ -4,8 +4,10 @@ use std::path::Path;
 use super::{kv::KvStore, sled::SledKvsEngine, KvsEngine};
 
 /// General store engine.
+#[derive(Debug, Clone)]
 pub struct Store(StoreInner);
 
+#[derive(Debug, Clone)]
 enum StoreInner {
     Kvs(KvStore),
     Sled(SledKvsEngine),
@@ -50,7 +52,7 @@ impl KvsEngine for Store {
     /// # use tempfile::TempDir;
     /// # fn main() -> Result<()> {
     /// # let directory = TempDir::new().expect("unable to create temporary working directory");
-    /// let mut store = Store::open_with_kvs(&directory)?;
+    /// let store = Store::open_with_kvs(&directory)?;
     ///
     /// store.set("key1".to_string(), "value1".to_string())?;
     /// assert_eq!(store.get("key1".to_string())?, Some("value1".to_string()));
@@ -66,15 +68,15 @@ impl KvsEngine for Store {
     /// # use tempfile::TempDir;
     /// # fn main() -> Result<()> {
     /// # let directory = TempDir::new().expect("unable to create temporary working directory");
-    /// let mut store = Store::open_with_sled(&directory)?;
+    /// let store = Store::open_with_sled(&directory)?;
     ///
     /// store.set("key1".to_string(), "value1".to_string())?;
     /// assert_eq!(store.get("key1".to_string())?, Some("value1".to_string()));
     /// # Ok(())
     /// # }
     /// ```
-    fn set(&mut self, key: String, value: String) -> Result<()> {
-        match &mut self.0 {
+    fn set(&self, key: String, value: String) -> Result<()> {
+        match &self.0 {
             StoreInner::Kvs(store) => store.set(key, value),
             StoreInner::Sled(store) => store.set(key, value),
         }
@@ -92,7 +94,7 @@ impl KvsEngine for Store {
     /// # use tempfile::TempDir;
     /// # fn main() -> Result<()> {
     /// # let directory = TempDir::new().expect("unable to create temporary working directory");
-    /// let mut store = Store::open_with_kvs(&directory)?;
+    /// let store = Store::open_with_kvs(&directory)?;
     ///
     /// assert_eq!(store.get("key1".to_string())?, None);
     ///
@@ -110,7 +112,7 @@ impl KvsEngine for Store {
     /// # use tempfile::TempDir;
     /// # fn main() -> Result<()> {
     /// # let directory = TempDir::new().expect("unable to create temporary working directory");
-    /// let mut store = Store::open_with_sled(&directory)?;
+    /// let store = Store::open_with_sled(&directory)?;
     ///
     /// assert_eq!(store.get("key1".to_string())?, None);
     ///
@@ -119,8 +121,8 @@ impl KvsEngine for Store {
     /// # Ok(())
     /// # }
     /// ```
-    fn get(&mut self, key: String) -> Result<Option<String>> {
-        match &mut self.0 {
+    fn get(&self, key: String) -> Result<Option<String>> {
+        match &self.0 {
             StoreInner::Kvs(store) => store.get(key),
             StoreInner::Sled(store) => store.get(key),
         }
@@ -138,7 +140,7 @@ impl KvsEngine for Store {
     /// # use tempfile::TempDir;
     /// # fn main() -> Result<()> {
     /// # let directory = TempDir::new().expect("unable to create temporary working directory");
-    /// let mut store = Store::open_with_kvs(&directory)?;
+    /// let store = Store::open_with_kvs(&directory)?;
     ///
     /// store.set("key1".to_string(), "value1".to_string())?;
     /// assert_eq!(store.get("key1".to_string())?, Some("value1".to_string()));
@@ -158,7 +160,7 @@ impl KvsEngine for Store {
     /// # use tempfile::TempDir;
     /// # fn main() -> Result<()> {
     /// # let directory = TempDir::new().expect("unable to create temporary working directory");
-    /// let mut store = Store::open_with_sled(&directory)?;
+    /// let store = Store::open_with_sled(&directory)?;
     ///
     /// store.set("key1".to_string(), "value1".to_string())?;
     /// assert_eq!(store.get("key1".to_string())?, Some("value1".to_string()));
@@ -168,8 +170,8 @@ impl KvsEngine for Store {
     /// # Ok(())
     /// # }
     /// ```
-    fn remove(&mut self, key: String) -> Result<()> {
-        match &mut self.0 {
+    fn remove(&self, key: String) -> Result<()> {
+        match &self.0 {
             StoreInner::Kvs(store) => store.remove(key),
             StoreInner::Sled(store) => store.remove(key),
         }

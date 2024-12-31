@@ -9,6 +9,7 @@ use crate::{KvError, Result};
 const DATA_FOLDER: &str = "sledstore";
 
 /// Wrapper for sled db engine.
+#[derive(Debug, Clone)]
 pub(crate) struct SledKvsEngine {
     db: sled::Db,
 }
@@ -32,13 +33,13 @@ impl SledKvsEngine {
 }
 
 impl KvsEngine for SledKvsEngine {
-    fn set(&mut self, key: String, value: String) -> Result<()> {
+    fn set(&self, key: String, value: String) -> Result<()> {
         self.db.insert(&key, value.as_bytes())?;
         self.db.flush()?;
         Ok(())
     }
 
-    fn get(&mut self, key: String) -> Result<Option<String>> {
+    fn get(&self, key: String) -> Result<Option<String>> {
         let value = self
             .db
             .get(&key)?
@@ -46,7 +47,7 @@ impl KvsEngine for SledKvsEngine {
         Ok(value)
     }
 
-    fn remove(&mut self, key: String) -> Result<()> {
+    fn remove(&self, key: String) -> Result<()> {
         if self.db.remove(&key)?.is_none() {
             return Err(KvError::KeyNotFound(key));
         }
