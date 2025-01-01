@@ -1,4 +1,5 @@
 use clap::crate_version;
+use dashmap::DashSet;
 use tracing::info;
 
 use crate::{
@@ -8,7 +9,6 @@ use crate::{
     KvError, KvOption, Result,
 };
 use std::{
-    collections::BTreeSet,
     fs::{self, File},
     path::{Path, PathBuf},
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
@@ -27,7 +27,7 @@ pub(crate) struct KvStore {
     /// Append writer recoding the incoming commands.
     writer: SharedRw<LogWriter<File>>,
     /// Immutable readers.
-    readers: SharedRw<BTreeSet<LogId>>,
+    readers: Arc<DashSet<LogId>>,
 
     /// In memory map pointing to located commands on disk.
     locations: SharedRw<CommandLocations>,
@@ -59,8 +59,8 @@ impl KvStore {
         let mut locations = CommandLocations::new();
 
         // Read all commands from previous log files.
-        let readers: BTreeSet<LogId> = finder::all_log_ids(&path)?.into_iter().collect();
-        for id in &readers {
+        let readers: DashSet<LogId> = finder::all_log_ids(&path)?.into_iter().collect();
+        for id in readers.iter() {
             let reader = LogReader::open(&path, *id)?;
             for (command, location) in reader.into_commands()? {
                 locations.merge(command.key(), location);
@@ -75,7 +75,7 @@ impl KvStore {
         let store = KvStore {
             path: path.as_ref().to_path_buf(),
             writer: SharedRw::new(writer),
-            readers: SharedRw::new(readers),
+            readers: Arc::new(readers),
             locations: SharedRw::new(locations),
             merger: SharedRw::new(merger),
             options,
@@ -91,20 +91,14 @@ impl KvStore {
         self.gather_merged_result()?;
 
         let mut merger = self.merger.wlock()?;
-        let readers = self.readers.rlock()?;
-        let should_merge = !merger.running() && readers.len() >= self.options.num_readers;
+        let should_merge = !merger.running() && self.readers.len() >= self.options.num_readers;
 
         if should_merge {
-            let readers: Vec<LogId> = {
-                let writer = self.writer.rlock()?;
-                let readers = readers
-                    .iter()
-                    .filter(|reader_id| reader_id != &&writer.id)
-                    .cloned()
-                    .collect();
-                readers
-            };
-
+            let writer = self.writer.rlock()?;
+            let readers = finder::all_log_ids(&self.path)?
+                .into_iter()
+                .filter(|id| id != &writer.id)
+                .collect();
             merger.merge(readers);
         }
         Ok(())
@@ -124,11 +118,10 @@ impl KvStore {
             }
 
             // remove old file ids
-            let mut readers = self.readers.wlock()?;
             for id in &merge_info.reader_ids {
                 let reader_path = finder::log_path(&self.path, id);
                 fs::remove_file(reader_path)?;
-                readers.remove(id);
+                self.readers.remove(id);
             }
         }
 
@@ -140,8 +133,7 @@ impl KvStore {
         if writer.offset >= self.options.writer_size {
             let new_writer_id = finder::next_log_id(&self.path);
             *writer = LogWriter::open(&self.path, new_writer_id)?;
-            let mut readers = self.readers.wlock()?;
-            readers.insert(writer.id);
+            self.readers.insert(writer.id);
         }
         Ok(())
     }

@@ -13,7 +13,7 @@ mod writer;
 pub(crate) use reader::LogReader;
 pub(crate) use writer::LogWriter;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct LogId(pub u64);
 
 pub(crate) trait LogRead<R>
