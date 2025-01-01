@@ -3,6 +3,7 @@ use std::thread;
 use super::ThreadPool;
 use crate::Result;
 
+/// Naive thread pool implementation without allocating threads ahead.
 pub struct NaiveThreadPool {}
 
 impl ThreadPool for NaiveThreadPool {

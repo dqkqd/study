@@ -3,6 +3,7 @@ use rayon::ThreadPoolBuilder;
 use super::ThreadPool;
 use crate::Result;
 
+/// Wrapper of [`rayon::ThreadPool`].
 pub struct RayonThreadPool {
     pool: rayon::ThreadPool,
 }

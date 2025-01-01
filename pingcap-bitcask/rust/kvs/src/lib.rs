@@ -10,8 +10,7 @@ mod merger;
 mod net;
 mod options;
 mod parser;
-// TODO: docs
-#[doc(hidden)]
+
 pub mod thread_pool;
 
 pub use kvs::Store;

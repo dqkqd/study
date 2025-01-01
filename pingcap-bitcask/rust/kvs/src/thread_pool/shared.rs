@@ -25,6 +25,9 @@ struct SharedData {
     receiver: Mutex<Receiver<ThreadPoolMessage>>,
 }
 
+/// Custom thread pool implementation.
+///
+/// The code is heavily based on [threadpool](https://docs.rs/threadpool/latest/threadpool/).
 pub struct SharedQueueThreadPool {
     /// Sender sends message to workers, for spawning workers.
     sender: Sender<ThreadPoolMessage>,
@@ -60,7 +63,6 @@ impl ThreadPool for SharedQueueThreadPool {
     }
 }
 
-/// Copy from <https://docs.rs/threadpool/latest/src/threadpool/lib.rs.html#101>
 struct Sentinel<'a> {
     shared_data: &'a Arc<SharedData>,
     worker_id: WorkerId,

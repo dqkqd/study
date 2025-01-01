@@ -32,13 +32,15 @@ where
     /// ```rust
     /// # use kvs::Result;
     /// # use kvs::{KvsEngine, KvsServer, Store};
+    /// # use kvs::thread_pool::{ThreadPool, SharedQueueThreadPool};
     /// # use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     /// # use tempfile::TempDir;
     /// # fn main() -> Result<()> {
     /// # let directory = TempDir::new().expect("unable to create temporary working directory");
     /// let store = Store::open(&directory)?;
     /// let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0);
-    /// let server = KvsServer::open(address, store)?;
+    /// let pool = SharedQueueThreadPool::new(8)?;
+    /// let server = KvsServer::open(address, store, pool)?;
     /// # Ok(())
     /// # }
     pub fn open(address: SocketAddr, store: E, pool: P) -> Result<KvsServer<E, P>> {

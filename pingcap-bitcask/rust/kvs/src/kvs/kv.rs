@@ -53,7 +53,8 @@ impl KvStore {
 
     /// Open database with provided options.
     pub fn open_with_options<P: AsRef<Path>>(path: P, options: KvOption) -> Result<KvStore> {
-        let _ = fs::create_dir(&path);
+        info!(dbpath = %path.as_ref().display(), "open database:");
+        let _ = fs::create_dir_all(&path);
 
         let mut locations = CommandLocations::new();
 
