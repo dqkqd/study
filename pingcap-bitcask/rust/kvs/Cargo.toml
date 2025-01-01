@@ -48,6 +48,6 @@ serde = { version = "1.0.216", features = ["derive"] }
 glob = "0.3.1"
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
-sled = "0.34.7"
+sled = { version = "0.34.7", features = ["testing"] }
 rayon = "1.10.0"
 ctrlc = "3.4.5"
