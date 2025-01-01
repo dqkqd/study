@@ -53,7 +53,7 @@ impl Merger {
 }
 
 fn merge<P: AsRef<Path>>(path: P, reader_ids: Vec<LogId>) -> MergeResult {
-    let mut locations = CommandLocations::new();
+    let locations = CommandLocations::new();
 
     let mut writer = LogWriter::open(&path, finder::next_log_id(&path))?;
 
@@ -64,13 +64,16 @@ fn merge<P: AsRef<Path>>(path: P, reader_ids: Vec<LogId>) -> MergeResult {
         }
     }
 
-    for location in locations.data.values_mut() {
-        let command = LogReader::open(&path, location.id)?.read(location)?;
-        *location = writer.write(&command)?;
+    let new_locations = CommandLocations::new();
+
+    for (key, location) in locations.data {
+        let command = LogReader::open(&path, location.id)?.read(&location)?;
+        let new_location = writer.write(&command)?;
+        new_locations.data.insert(key, new_location);
     }
 
     Ok(MergeInfo {
         reader_ids,
-        locations,
+        locations: new_locations,
     })
 }

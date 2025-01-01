@@ -30,7 +30,7 @@ pub(crate) struct KvStore {
     readers: Arc<DashSet<LogId>>,
 
     /// In memory map pointing to located commands on disk.
-    locations: SharedRw<CommandLocations>,
+    locations: Arc<CommandLocations>,
 
     /// Database options.
     options: KvOption,
@@ -56,7 +56,7 @@ impl KvStore {
         info!(dbpath = %path.as_ref().display(), "open database:");
         let _ = fs::create_dir_all(&path);
 
-        let mut locations = CommandLocations::new();
+        let locations = CommandLocations::new();
 
         // Read all commands from previous log files.
         let readers: DashSet<LogId> = finder::all_log_ids(&path)?.into_iter().collect();
@@ -76,7 +76,7 @@ impl KvStore {
             path: path.as_ref().to_path_buf(),
             writer: SharedRw::new(writer),
             readers: Arc::new(readers),
-            locations: SharedRw::new(locations),
+            locations: Arc::new(locations),
             merger: SharedRw::new(merger),
             options,
         };
@@ -111,9 +111,8 @@ impl KvStore {
         if let Some(Ok(merge_info)) = merger.result() {
             // transfer new key
             {
-                let mut locations = self.locations.wlock()?;
                 for (key, location) in merge_info.locations.data {
-                    locations.merge(key, location)
+                    self.locations.merge(key, location)
                 }
             }
 
@@ -148,18 +147,15 @@ impl KvsEngine for KvStore {
 
         let command = Command::set(key.clone(), value);
         let location = writer.write(&command)?;
-
-        let mut locations = self.locations.wlock()?;
-        locations.merge(key, location);
+        self.locations.data.insert(key, location);
 
         Ok(())
     }
 
     fn get(&self, key: String) -> Result<Option<String>> {
-        let locations = self.locations.rlock()?;
-        match locations.data.get(&key) {
+        match self.locations.data.get(&key) {
             Some(location) => {
-                let command = LogReader::open(&self.path, location.id)?.read(location)?;
+                let command = LogReader::open(&self.path, location.id)?.read(&location)?;
                 Ok(command.value())
             }
             None => Ok(None),
@@ -167,8 +163,7 @@ impl KvsEngine for KvStore {
     }
 
     fn remove(&self, key: String) -> Result<()> {
-        let mut locations = self.locations.wlock()?;
-        if locations.data.remove(&key).is_none() {
+        if self.locations.data.remove(&key).is_none() {
             return Err(KvError::KeyNotFound(key));
         }
         self.rollover()?;

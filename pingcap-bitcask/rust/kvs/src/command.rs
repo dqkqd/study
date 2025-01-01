@@ -1,9 +1,7 @@
-use std::{
-    collections::BTreeMap,
-    time::{Duration, SystemTime},
-};
+use std::time::{Duration, SystemTime};
 
 use crate::{log::LogId, parser::ByteParser};
+use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -80,7 +78,7 @@ pub(crate) struct CommandLocation {
 
 #[derive(Debug, Default)]
 pub(crate) struct CommandLocations {
-    pub data: BTreeMap<String, CommandLocation>,
+    pub data: DashMap<String, CommandLocation>,
 }
 
 impl CommandLocations {
@@ -88,7 +86,7 @@ impl CommandLocations {
         CommandLocations::default()
     }
 
-    pub fn merge(&mut self, key: String, location: CommandLocation) {
+    pub fn merge(&self, key: String, location: CommandLocation) {
         self.data
             .entry(key)
             .and_modify(|old_location| {
