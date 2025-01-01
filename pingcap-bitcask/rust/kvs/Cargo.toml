@@ -24,10 +24,15 @@ path = "src/bin/kvs_server.rs"
 name = "benches"
 harness = false
 
+[[bench]]
+name = "benches_pool"
+harness = false
+
 [dev-dependencies]
 assert_cmd = "2.0.16"
 criterion = "0.5.1"
 crossbeam-utils = "0.8.21"
+num_cpus = "1.16.0"
 panic-control = "0.1.4"
 predicates = "3.1.2"
 rand = { version = "0.8.5" }
