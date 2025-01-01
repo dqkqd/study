@@ -30,8 +30,8 @@ impl KvsClient {
     /// # let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0);
     /// let pool = SharedQueueThreadPool::new(8)?;
     /// let server = KvsServer::open(address, store, pool)?;
-    /// server.serve()?;
-    /// let client = KvsClient::connect(address)?;
+    /// let server = server.serve();
+    /// let client = KvsClient::connect(server.address)?;
     /// # Ok(())
     /// # }
     pub fn connect(address: SocketAddr) -> Result<KvsClient> {

@@ -13,7 +13,7 @@ pub use shared::SharedQueueThreadPool;
 /// Trait handles thread pool to avoiding re-creating threads.
 pub trait ThreadPool
 where
-    Self: std::marker::Sized,
+    Self: std::marker::Sized + Send + 'static,
 {
     /// Create new thread pool.
     fn new(threads: u32) -> Result<Self>;

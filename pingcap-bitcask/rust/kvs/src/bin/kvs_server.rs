@@ -1,4 +1,4 @@
-use std::{env, io, net::SocketAddr};
+use std::{env, io, net::SocketAddr, sync::mpsc};
 
 use clap::{Parser, ValueEnum};
 use kvs::{thread_pool, thread_pool::ThreadPool, KvsServer, Result, Store};
@@ -32,7 +32,13 @@ fn main() -> Result<()> {
     let pool = thread_pool::NaiveThreadPool::new(1)?;
     let server = KvsServer::open(cli.addr, store, pool)?;
 
-    server.serve()?;
+    server.serve();
+
+    // handling shutdown
+    let (tx, rx) = mpsc::channel();
+    ctrlc::set_handler(move || tx.send(()).expect("could not send signal on channel."))
+        .expect("Error setting Ctrl-C handler");
+    rx.recv().expect("Could not receive from channel.");
 
     Ok(())
 }
