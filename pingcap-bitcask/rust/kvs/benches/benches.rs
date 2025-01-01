@@ -17,14 +17,18 @@ const VALUE_LENGTH: usize = 100000;
 
 fn sample(size: usize) -> Vec<(String, String)> {
     let mut rng = ChaCha20Rng::seed_from_u64(RANDOM_SEED);
+    let mut iter = rng.clone().sample_iter(&Alphanumeric);
 
     let mut get_string = |len: usize| -> String {
         let nbytes = rng.gen_range(1..len);
-        rng.clone()
-            .sample_iter(&Alphanumeric)
-            .take(nbytes)
-            .map(char::from)
-            .collect()
+        let mut v = vec![];
+        for c in iter.by_ref() {
+            if v.len() >= nbytes {
+                break;
+            }
+            v.push(c);
+        }
+        String::from_utf8(v).unwrap()
     };
 
     (0..size)
