@@ -15,6 +15,8 @@ pub enum KvError {
     GlobPattern(#[from] glob::PatternError),
     #[error("sled error `{0}`")]
     Sled(#[from] sled::Error),
+    #[error("rayon threadpool build `{0}`")]
+    RayonThreadPoolBuild(#[from] rayon::ThreadPoolBuildError),
 
     #[error("file id `{0}` does not exist")]
     FileIdDoesNotExist(u64),

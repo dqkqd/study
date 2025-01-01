@@ -1,17 +1,24 @@
+use rayon::ThreadPoolBuilder;
+
 use super::ThreadPool;
 use crate::Result;
 
-pub struct RayonThreadPool {}
+pub struct RayonThreadPool {
+    pool: rayon::ThreadPool,
+}
 
 impl ThreadPool for RayonThreadPool {
-    fn new(_threads: u32) -> Result<RayonThreadPool> {
-        todo!()
+    fn new(threads: u32) -> Result<RayonThreadPool> {
+        let pool = ThreadPoolBuilder::new()
+            .num_threads(threads as usize)
+            .build()?;
+        Ok(RayonThreadPool { pool })
     }
 
-    fn spawn<F>(&self, _job: F)
+    fn spawn<F>(&self, job: F)
     where
         F: FnOnce() + Send + 'static,
     {
-        todo!()
+        self.pool.spawn(job)
     }
 }
