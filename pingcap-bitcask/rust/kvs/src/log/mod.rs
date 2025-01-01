@@ -1,4 +1,4 @@
-use std::io::{BufReader, Read, Seek};
+use std::io::{BufReader, Read};
 
 use crate::{
     command::{Command, CommandLocation},
@@ -11,7 +11,7 @@ mod reader;
 mod writer;
 
 pub(crate) use reader::LogReader;
-pub(crate) use writer::LogReaderWriter;
+pub(crate) use writer::LogWriter;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct LogId(pub u64);
@@ -20,9 +20,8 @@ pub(crate) trait LogRead<R>
 where
     R: Read,
 {
-    /// Read a command at a specific location.
-    /// We need `&mut self` since this require a file seek.
-    fn read(&mut self, location: &CommandLocation) -> Result<Command>;
+    /// Read a command at a specific location, consume itself.
+    fn read(self, location: &CommandLocation) -> Result<Command>;
 
     /// Read all commands at once, consume itself
     fn into_commands(self) -> Result<IntoCommands<R>>;
@@ -33,7 +32,6 @@ pub(crate) trait LogWrite {
     fn write(&mut self, command: &Command) -> Result<CommandLocation>;
 }
 
-#[derive(Debug)]
 pub(crate) struct IntoCommands<R>
 where
     R: Read,
@@ -76,9 +74,4 @@ where
 
         Some((command, location))
     }
-}
-
-fn read_command<R: Read + Seek>(reader: &mut R, location: &CommandLocation) -> Result<Command> {
-    reader.seek(std::io::SeekFrom::Start(location.offset as u64))?;
-    Command::from_reader(reader)
 }

@@ -3,7 +3,7 @@ use tracing::info;
 
 use crate::{
     command::{Command, CommandLocations},
-    log::{finder, LogId, LogRead, LogReader, LogReaderWriter, LogWrite},
+    log::{finder, LogId, LogRead, LogReader, LogWrite, LogWriter},
     merger::Merger,
     KvError, KvOption, Result,
 };
@@ -25,7 +25,7 @@ pub(crate) struct KvStore {
     path: PathBuf,
 
     /// Append writer recoding the incoming commands.
-    writer: SharedRw<LogReaderWriter<File>>,
+    writer: SharedRw<LogWriter<File>>,
     /// Immutable readers.
     readers: SharedRw<BTreeSet<LogId>>,
 
@@ -58,14 +58,8 @@ impl KvStore {
 
         let mut locations = CommandLocations::new();
 
-        // Transfer all previous remaining written log.
-        for id in finder::writer_log_ids(&path)? {
-            let writer = LogReaderWriter::open(&path, id)?;
-            writer.transfer()?;
-        }
-
-        // Read all commands from read-only log files.
-        let readers: BTreeSet<LogId> = finder::immutable_log_ids(&path)?.into_iter().collect();
+        // Read all commands from previous log files.
+        let readers: BTreeSet<LogId> = finder::all_log_ids(&path)?.into_iter().collect();
         for id in &readers {
             let reader = LogReader::open(&path, *id)?;
             for (command, location) in reader.into_commands()? {
@@ -73,7 +67,8 @@ impl KvStore {
             }
         }
 
-        let writer = LogReaderWriter::open(&path, finder::next_log_id(&path))?;
+        // Create new writer.
+        let writer = LogWriter::open(&path, finder::next_log_id(&path))?;
 
         let merger = Merger::new(&path);
 
@@ -93,7 +88,6 @@ impl KvStore {
 
     /// Merging process.
     fn merge(&self) -> Result<()> {
-        // TODO: do not need merger anymore, run it directly here
         self.gather_merged_result()?;
 
         let mut merger = self.merger.wlock()?;
@@ -101,7 +95,16 @@ impl KvStore {
         let should_merge = !merger.running() && readers.len() >= self.options.num_readers;
 
         if should_merge {
-            let readers: Vec<LogId> = readers.iter().cloned().collect();
+            let readers: Vec<LogId> = {
+                let writer = self.writer.rlock()?;
+                let readers = readers
+                    .iter()
+                    .filter(|reader_id| reader_id != &&writer.id)
+                    .cloned()
+                    .collect();
+                readers
+            };
+
             merger.merge(readers);
         }
         Ok(())
@@ -123,7 +126,7 @@ impl KvStore {
             // remove old file ids
             let mut readers = self.readers.wlock()?;
             for id in &merge_info.reader_ids {
-                let reader_path = finder::reader_path(&self.path, id);
+                let reader_path = finder::log_path(&self.path, id);
                 fs::remove_file(reader_path)?;
                 readers.remove(id);
             }
@@ -135,15 +138,10 @@ impl KvStore {
     fn rollover(&self) -> Result<()> {
         let mut writer = self.writer.wlock()?;
         if writer.offset >= self.options.writer_size {
-            let writer_log_id = finder::next_log_id(&self.path);
-            let old_writer_log_id = writer.id;
-
-            let mut new_writer = LogReaderWriter::open(&self.path, writer_log_id)?;
-            std::mem::swap(&mut new_writer, &mut writer);
-            new_writer.transfer()?;
-
+            let new_writer_id = finder::next_log_id(&self.path);
+            *writer = LogWriter::open(&self.path, new_writer_id)?;
             let mut readers = self.readers.wlock()?;
-            readers.insert(old_writer_log_id);
+            readers.insert(writer.id);
         }
         Ok(())
     }
@@ -169,13 +167,7 @@ impl KvsEngine for KvStore {
         let locations = self.locations.rlock()?;
         match locations.data.get(&key) {
             Some(location) => {
-                let mut writer = self.writer.wlock()?;
-                let command = if location.id == writer.id {
-                    writer.read(location)?
-                } else {
-                    LogReader::open(&self.path, location.id)?.read(location)?
-                };
-
+                let command = LogReader::open(&self.path, location.id)?.read(location)?;
                 Ok(command.value())
             }
             None => Ok(None),

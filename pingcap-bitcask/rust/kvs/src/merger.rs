@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     command::CommandLocations,
-    log::{finder, LogId, LogRead, LogReader, LogReaderWriter, LogWrite},
+    log::{finder, LogId, LogRead, LogReader, LogWrite, LogWriter},
     Result,
 };
 
@@ -55,7 +55,7 @@ impl Merger {
 fn merge<P: AsRef<Path>>(path: P, reader_ids: Vec<LogId>) -> MergeResult {
     let mut locations = CommandLocations::new();
 
-    let mut writer = LogReaderWriter::open(&path, finder::next_log_id(&path))?;
+    let mut writer = LogWriter::open(&path, finder::next_log_id(&path))?;
 
     for id in &reader_ids {
         let reader = LogReader::open(&path, *id)?;
@@ -68,8 +68,6 @@ fn merge<P: AsRef<Path>>(path: P, reader_ids: Vec<LogId>) -> MergeResult {
         let command = LogReader::open(&path, location.id)?.read(location)?;
         *location = writer.write(&command)?;
     }
-
-    writer.transfer()?;
 
     Ok(MergeInfo {
         reader_ids,
