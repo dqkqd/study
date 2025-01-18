@@ -11,3 +11,9 @@
   The database is integrated with server / client cli.
   It is thread-safe, a bit more performant
   (can serve more than 1000 read / write requests).
+
+- [Mini-lsm (rust)](https://github.com/dqkqd/mini-lsm/tree/study):
+  A [beautiful course](https://skyzh.github.io/mini-lsm/) about LSM.
+  It was soo fun and practical,
+  though the difficulty is higher and requires lots of reading.
+
