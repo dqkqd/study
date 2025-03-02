@@ -17,3 +17,6 @@
   It was soo fun and practical,
   though the difficulty is higher and requires lots of reading.
 
+## Distributed systems
+
+- [MIT Distributied systems course 6.5840-golabs-2025](https://github.com/dqkqd/6.5840-golabs-2025/)
