@@ -1,0 +1,3 @@
+[submodule "codecrafters/codecrafters-shell-rust"]
+	path = codecrafters/codecrafters-shell-rust
+	url = git@github.com:dqkqd/codecrafters-shell-rust.git
