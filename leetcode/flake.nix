@@ -21,6 +21,7 @@
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
             bashInteractive
+            leetcode-cli
 
             cargo
             clippy
@@ -32,7 +33,21 @@
             gopls
             gotools
             gofumpt
+
+            basedpyright
+            (pkgs.python313.withPackages (python-pkgs: [
+              python-pkgs.ruff
+              python-pkgs.black
+              python-pkgs.isort
+            ]))
           ];
+
+          shellHook = ''
+            eval "$(leetcode completions)"
+
+            mkdir -p code
+            cp $HOME/.leetcode/code/* ./code/
+          '';
         };
       }
     );

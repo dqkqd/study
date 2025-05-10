@@ -1,0 +1,6 @@
+reload:
+    direnv reload
+
+add: reload
+    git add code
+    git commit -m "feat: leetcode"
