@@ -1,3 +1,7 @@
 [submodule "codecrafters/codecrafters-shell-rust"]
 	path = codecrafters/codecrafters-shell-rust
 	url = git@github.com:dqkqd/codecrafters-shell-rust.git
+
+[submodule "rust/zero2prod"]
+	path = rust/zero2prod
+	url = git@github.com:dqkqd/zero2prod.git
