@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use rand::Rng;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -31,11 +32,12 @@ impl ServerConfig {
 
 #[derive(Deserialize)]
 pub struct ClientConfig {
-    pub requests_per_sec: u32,
+    pub rate: f64,
 }
 impl ClientConfig {
     pub fn frequency(&self) -> Duration {
-        Duration::from_secs_f64(1.0 / (self.requests_per_sec as f64))
+        let freq: f64 = rand::rng().random();
+        Duration::from_secs_f64(freq / self.rate)
     }
 }
 
@@ -43,6 +45,7 @@ impl ClientConfig {
 pub struct RatelimiterConfig {
     pub port: u16,
     pub token_bucket: TokenBucketConfig,
+    pub fixed_window_counter: FixedWindowCounterConfig,
 }
 impl RatelimiterConfig {
     pub fn addr(&self) -> String {
@@ -54,4 +57,10 @@ impl RatelimiterConfig {
 pub struct TokenBucketConfig {
     pub capacity: u32,
     pub rate: u64,
+}
+
+#[derive(Deserialize)]
+pub struct FixedWindowCounterConfig {
+    pub capacity: u32,
+    pub window_size: u32,
 }

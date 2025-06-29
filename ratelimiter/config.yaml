@@ -3,11 +3,18 @@ server:
   port: 8000
 
 client:
-  requests_per_sec: 10
+  # rand(0, 1) / rate (seconds)
+  rate: 10
 
 ratelimiter:
   port: 3000
+
   token_bucket:
     capacity: 4
     rate: 1
     valkey_port: 6379
+
+  fixed_window_counter:
+    capacity: 4
+    # seconds
+    window_size: 1

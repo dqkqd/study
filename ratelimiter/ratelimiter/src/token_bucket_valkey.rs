@@ -8,18 +8,18 @@ pub struct TokenBucketValkey {
     capacity: u32,
     rate: u64,
     client: redis::Client,
-    ratelimiter_key: Uuid,
+    key: Uuid,
 }
 
 impl TokenBucketValkey {
     pub fn new(capacity: u32, rate: u64) -> TokenBucketValkey {
         let client = redis::Client::open("redis://127.0.0.1:6379/").unwrap();
-        let ratelimiter_key = Uuid::new_v4();
+        let key = Uuid::new_v4();
         TokenBucketValkey {
             capacity,
             rate,
             client,
-            ratelimiter_key,
+            key,
         }
     }
 }
@@ -43,7 +43,7 @@ return counter <= capacity
         let ok: bool = script
             .arg(self.capacity)
             .arg(self.rate)
-            .arg(self.ratelimiter_key.to_string())
+            .arg(self.key.to_string())
             .invoke(&mut conn)
             .unwrap();
         if !ok {

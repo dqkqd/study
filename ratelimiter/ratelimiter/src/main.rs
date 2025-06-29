@@ -14,6 +14,7 @@ struct Args {
 enum Algo {
     TokenBucketNaive,
     TokenBucketValkey,
+    FixedWindowCounter,
 }
 
 impl Algo {
@@ -21,6 +22,7 @@ impl Algo {
         match self {
             Algo::TokenBucketNaive => Ratelimiter::token_bucket_naive(config),
             Algo::TokenBucketValkey => Ratelimiter::token_bucket_valkey(config),
+            Algo::FixedWindowCounter => Ratelimiter::fixed_window_counter(config),
         }
     }
 }
