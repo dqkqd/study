@@ -12,7 +12,6 @@ ratelimiter:
   token_bucket:
     capacity: 4
     rate: 1
-    valkey_port: 6379
 
   fixed_window_counter:
     capacity: 4

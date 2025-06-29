@@ -4,18 +4,18 @@ use uuid::Uuid;
 use crate::Ratelimit;
 
 #[derive(Clone)]
-pub struct TokenBucketValkey {
+pub struct TokenBucket {
     capacity: u32,
     rate: u64,
     client: redis::Client,
     key: Uuid,
 }
 
-impl TokenBucketValkey {
-    pub fn new(capacity: u32, rate: u64) -> TokenBucketValkey {
+impl TokenBucket {
+    pub fn new(capacity: u32, rate: u64) -> TokenBucket {
         let client = redis::Client::open("redis://127.0.0.1:6379/").unwrap();
         let key = Uuid::new_v4();
-        TokenBucketValkey {
+        TokenBucket {
             capacity,
             rate,
             client,
@@ -24,7 +24,7 @@ impl TokenBucketValkey {
     }
 }
 
-impl Ratelimit for TokenBucketValkey {
+impl Ratelimit for TokenBucket {
     fn try_accept(&self) -> Result<()> {
         let mut conn = self.client.get_connection().unwrap();
         let script = redis::Script::new(

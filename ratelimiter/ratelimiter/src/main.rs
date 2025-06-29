@@ -12,16 +12,14 @@ struct Args {
 #[derive(Clone, ValueEnum, Serialize)]
 #[serde(rename_all = "kebab-case")]
 enum Algo {
-    TokenBucketNaive,
-    TokenBucketValkey,
+    TokenBucket,
     FixedWindowCounter,
 }
 
 impl Algo {
     fn ratelimiter(&self, config: &appconfig::RatelimiterConfig) -> Ratelimiter {
         match self {
-            Algo::TokenBucketNaive => Ratelimiter::token_bucket_naive(config),
-            Algo::TokenBucketValkey => Ratelimiter::token_bucket_valkey(config),
+            Algo::TokenBucket => Ratelimiter::token_bucket(config),
             Algo::FixedWindowCounter => Ratelimiter::fixed_window_counter(config),
         }
     }
