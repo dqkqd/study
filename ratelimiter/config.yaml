@@ -1,0 +1,13 @@
+---
+server:
+  port: 8000
+
+client:
+  requests_per_sec: 10
+
+ratelimiter:
+  port: 3000
+  token_bucket:
+    capacity: 4
+    rate: 1
+    valkey_port: 6379

@@ -1,64 +1,40 @@
-mod algo;
+use anyhow::Result;
 
-pub use algo::Ratelimiter;
-use http_body_util::{BodyExt, Full};
-use hyper::{body::Bytes, Request, Response, StatusCode};
-use hyper_util::rt::TokioIo;
-use tokio::{
-    io::{self, AsyncWriteExt},
-    net::TcpStream,
-};
+mod token_bucket_naive;
+mod token_bucket_valkey;
 
-pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
-pub(crate) type IncomingRequest = Request<hyper::body::Incoming>;
-pub(crate) type FullResponse = Response<Full<Bytes>>;
+use token_bucket_naive::TokenBucketNaive;
+use token_bucket_valkey::TokenBucketValkey;
 
-pub async fn service(req: IncomingRequest) -> Result<FullResponse> {
-    Ratelimiter::new()?.try_accept_request(req).await
+pub trait Ratelimit {
+    fn try_accept(&self) -> Result<()>;
 }
 
-async fn forward_request_to_server(req: IncomingRequest) -> Result<FullResponse> {
-    let bytes = convert_request_to_bytes(req).await?;
-    let resp = forward_bytes_to_server(bytes).await?;
-    Ok(resp)
+#[derive(Clone)]
+pub enum Ratelimiter {
+    TokenBucketNaive(TokenBucketNaive),
+    TokenBucketValkey(TokenBucketValkey),
 }
+impl Ratelimiter {
+    pub fn token_bucket_naive(config: &appconfig::RatelimiterConfig) -> Ratelimiter {
+        Ratelimiter::TokenBucketNaive(TokenBucketNaive::new(
+            config.token_bucket.capacity,
+            config.token_bucket.rate,
+        ))
+    }
 
-async fn convert_request_to_bytes(req: IncomingRequest) -> Result<Bytes> {
-    let body = req.into_body();
-    let bytes = body.collect().await.map(|collected| collected.to_bytes())?;
-    Ok(bytes)
+    pub fn token_bucket_valkey(config: &appconfig::RatelimiterConfig) -> Ratelimiter {
+        Ratelimiter::TokenBucketValkey(TokenBucketValkey::new(
+            config.token_bucket.capacity,
+            config.token_bucket.rate,
+        ))
+    }
 }
-
-async fn forward_bytes_to_server(bytes: Bytes) -> Result<FullResponse> {
-    let stream = TcpStream::connect("server:3000").await?;
-    let io = TokioIo::new(stream);
-
-    let (mut sender, conn) = hyper::client::conn::http1::handshake(io).await?;
-
-    tokio::task::spawn(async move {
-        if let Err(err) = conn.await {
-            eprintln!("Connection failed: {:?}", err);
-        }
-    });
-
-    let req = Request::builder().body(Full::<Bytes>::new(bytes))?;
-    let mut res = sender.send_request(req).await?;
-
-    let mut buf = Vec::new();
-    let mut buffer = io::BufWriter::new(&mut buf);
-
-    while let Some(next) = res.frame().await {
-        let frame = next?;
-        if let Some(chunk) = frame.data_ref() {
-            buffer.write_all(chunk).await?;
+impl Ratelimit for Ratelimiter {
+    fn try_accept(&self) -> Result<()> {
+        match self {
+            Ratelimiter::TokenBucketNaive(r) => r.try_accept(),
+            Ratelimiter::TokenBucketValkey(r) => r.try_accept(),
         }
     }
-    buffer.flush().await?;
-    buf.push(b'\n');
-
-    let resp = Response::builder()
-        .status(StatusCode::OK)
-        .body(Full::new(Bytes::from(buf)))?;
-
-    Ok(resp)
 }
