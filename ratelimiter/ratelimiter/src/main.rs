@@ -14,6 +14,7 @@ struct Args {
 enum Algo {
     TokenBucket,
     FixedWindowCounter,
+    SlidingWindowLog,
 }
 
 impl Algo {
@@ -21,6 +22,7 @@ impl Algo {
         match self {
             Algo::TokenBucket => Ratelimiter::token_bucket(config),
             Algo::FixedWindowCounter => Ratelimiter::fixed_window_counter(config),
+            Algo::SlidingWindowLog => Ratelimiter::sliding_window_log(config),
         }
     }
 }

@@ -17,3 +17,8 @@ ratelimiter:
     capacity: 4
     # seconds
     window_size: 1
+
+  sliding_window_log:
+    capacity: 4
+    # seconds
+    window_size: 1
