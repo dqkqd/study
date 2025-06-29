@@ -1,10 +1,12 @@
 use anyhow::Result;
 
 mod fixed_window_counter;
+mod sliding_window_counter;
 mod sliding_window_log;
 mod token_bucket;
 
 use fixed_window_counter::FixedWindowCounter;
+use sliding_window_counter::SlidingWindowCounter;
 use sliding_window_log::SlidingWindowLog;
 use token_bucket::TokenBucket;
 
@@ -17,6 +19,7 @@ pub enum Ratelimiter {
     TokenBucket(TokenBucket),
     FixedWindowCounter(FixedWindowCounter),
     SlidingWindowLog(SlidingWindowLog),
+    SlidingWindowCounter(SlidingWindowCounter),
 }
 impl Ratelimiter {
     pub fn token_bucket(config: &appconfig::RatelimiterConfig) -> Ratelimiter {
@@ -39,6 +42,14 @@ impl Ratelimiter {
             config.sliding_window_log.window_size,
         ))
     }
+
+    pub fn sliding_window_counter(config: &appconfig::RatelimiterConfig) -> Ratelimiter {
+        Ratelimiter::SlidingWindowCounter(SlidingWindowCounter::new(
+            config.sliding_window_counter.capacity,
+            config.sliding_window_counter.window_size,
+            config.sliding_window_counter.batch_ratio,
+        ))
+    }
 }
 impl Ratelimit for Ratelimiter {
     fn try_accept(&self) -> Result<()> {
@@ -46,6 +57,7 @@ impl Ratelimit for Ratelimiter {
             Ratelimiter::TokenBucket(r) => r.try_accept(),
             Ratelimiter::FixedWindowCounter(r) => r.try_accept(),
             Ratelimiter::SlidingWindowLog(r) => r.try_accept(),
+            Ratelimiter::SlidingWindowCounter(r) => r.try_accept(),
         }
     }
 }

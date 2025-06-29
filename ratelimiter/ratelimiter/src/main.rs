@@ -15,6 +15,7 @@ enum Algo {
     TokenBucket,
     FixedWindowCounter,
     SlidingWindowLog,
+    SlidingWindowCounter,
 }
 
 impl Algo {
@@ -23,6 +24,7 @@ impl Algo {
             Algo::TokenBucket => Ratelimiter::token_bucket(config),
             Algo::FixedWindowCounter => Ratelimiter::fixed_window_counter(config),
             Algo::SlidingWindowLog => Ratelimiter::sliding_window_log(config),
+            Algo::SlidingWindowCounter => Ratelimiter::sliding_window_counter(config),
         }
     }
 }

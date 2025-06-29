@@ -22,3 +22,10 @@ ratelimiter:
     capacity: 4
     # seconds
     window_size: 1
+
+  sliding_window_counter:
+    capacity: 4
+    # seconds
+    window_size: 1
+    # batch_size = window_size * batch_ratio
+    batch_ratio: 0.02

@@ -47,6 +47,7 @@ pub struct RatelimiterConfig {
     pub token_bucket: TokenBucketConfig,
     pub fixed_window_counter: FixedWindowCounterConfig,
     pub sliding_window_log: SlidingWindowLogConfig,
+    pub sliding_window_counter: SlidingWindowCounterConfig,
 }
 impl RatelimiterConfig {
     pub fn addr(&self) -> String {
@@ -70,4 +71,11 @@ pub struct FixedWindowCounterConfig {
 pub struct SlidingWindowLogConfig {
     pub capacity: u32,
     pub window_size: u32,
+}
+
+#[derive(Deserialize)]
+pub struct SlidingWindowCounterConfig {
+    pub capacity: u32,
+    pub window_size: u32,
+    pub batch_ratio: f32,
 }
