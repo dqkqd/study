@@ -20,3 +20,7 @@
 ## Distributed systems
 
 - [MIT Distributied systems course 6.5840-golabs-2025](https://github.com/dqkqd/6.5840-golabs-2025/)
+
+## Web
+
+- [Zero To Production In Rust](https://github.com/dqkqd/zero2prod)
