@@ -1,0 +1,459 @@
+# Rust Atomics and Locks
+
+Notes and exercises from [Rust Atomics and Locks](https://marabos.nl/atomics/).
+(_however, I only note what I did not know_).
+
+## Chapter 1: Basics
+
+1. `t.join().unwrap()` does not block (thus does not guarantee order). Before
+   reading this chapter, I thought this was a block operation, and the main process
+   would wait for `t` to complete before executing.
+
+   ```rust
+   fn main() {
+       let t1 = thread::spawn(f);
+       let t2 = thread::spawn(f);
+       println!("Hello from the main thread");
+       t1.join().unwrap();
+       t2.join().unwrap();
+   }
+   ```
+
+2. [`thread::scope`](https://doc.rust-lang.org/stable/std/thread/fn.scope.html)
+   allows us to define thread that cannot outlive a certain scope. All threads
+   will be joined at the end of the scope.
+
+   ```rust
+    use std::thread;
+
+    let mut a = vec![1, 2, 3];
+    let mut x = 0;
+
+    thread::scope(|s| {
+        s.spawn(|| {
+            println!("hello from the first scoped thread");
+            // We can borrow `a` here.
+            dbg!(&a);
+        });
+        s.spawn(|| {
+            println!("hello from the second scoped thread");
+            // We can even mutably borrow `x` here,
+            // because no other threads are using it.
+            x += a[0] + a[2];
+        });
+        println!("hello from the main thread");
+    });
+
+    // After the scope, we can modify and access our variables again:
+    a.push(4);
+    assert_eq!(x, a.len());
+   ```
+
+3. [`Box::leak`](https://doc.rust-lang.org/std/boxed/struct.Box.html#method.leak)
+   releases ownership of `Box`, making it lives until the end of the program. Thus,
+   allowing it to be borrowed and used by any thread.
+
+   ```rust
+    let x: &'static = [i32; 3] = Box::leak(Box::new([1, 2, 3]));
+    thread::spawn(move || dbg!(x));
+    thread::spawn(move || dbg!(x));
+   ```
+
+4. Undefined behavior can "travel back in time"
+
+   Suppose we have these snippet:
+
+   ```rust
+    match index {
+        0 => x(),
+        1 => y(),
+        _ => z(index)
+    }
+    // ...
+    let a = [123, 456, 789];
+    let b = unsafe { a.get_unchecked(index) };
+   ```
+
+   The compiler will optimize the above snippet into:
+
+   ```rust
+    match index {
+        0 => x(),
+        1 => y(),
+        _ => z(2) // 2. because `index` can only be 0,1,2; `z(index)` became `z(2)`.
+    }
+    // suppose index=3, the `a.get_unchecked(index)` would panic. However
+    // since `z(index)` - which should be `z(3)` - became `z(2)`, the program
+    // becomes undefined even before reaching the `a.get_unchecked(index)`.
+    // making it hard to reason about.
+    // ...
+    let a = [123, 456, 789];
+    let b = unsafe { a.get_unchecked(index) }; // 1. `index` can only be 0,1,2
+   ```
+
+5. [`Cell`](https://doc.rust-lang.org/std/cell/struct.Cell.html) cannot
+   modify the underlying value, but [`RefCell`](https://doc.rust-lang.org/std/cell/struct.RefCell.html) can.
+
+   Using `Cell`, we need to take the value out, modify it, and put the value back.
+
+   ```rust
+    fn f(v: &Cell<Vec<i32>>) {
+        let mut v2 = v.take(); // take the value out
+        v2.push(1); // modify the value
+        v.set(v2); // put the value back to the cell
+    }
+   ```
+
+   Using `RefCell`, we can just modify the value inplace.
+
+   ```rust
+    fn f(v: &RefCell<Vec<i32>>) {
+        v.borrow_mut().push(1);
+    }
+   ```
+
+6. All interior mutability rely on [`UnsafeCell`](https://doc.rust-lang.org/std/cell/struct.UnsafeCell.html)
+
+7. A type is `Send` if it can be sent to another thread.
+
+   - `Rc<i32>` is not `Send` because its reference counter is not thread safe.
+     which could lead to many threads `drop` it at the same time.
+   - `Arc<i32>` is `Send` because its reference counter is `Atomic` (and thus, thread safe).
+   - `&i32` is `Send` because it reference to something immutable.
+   - `Cell<i32>` is `Send` even though its value can be mutate, because after `Send`,
+     only one thread owns it. However `&Cell<i32>` is not `Send` because another thread
+     can hold `&Cell<i32>` and mutate its value.
+
+8. A type is `Sync` if it can be shared with another thread.
+   `T` is `Sync` iff `&T` is sent.
+
+   - `i32` is `Sync` because `&i32` is `Send`
+   - `Cell<i32>` is not `Sync` because `&Cell<i32>` is not `Send`.
+
+9. We can use [Phantom type parameter](https://doc.rust-lang.org/rust-by-example/generics/phantom.html)
+   to disable `Send` or `Sync` to the struct that has all of its field implement `Send` or `Sync`.
+
+   ```rust
+    use std::marker::PhantomData;
+    struct X {
+        handle: i32,
+        _not_sync: PhantomData<Cell<()>>, // Cell<()> is not Sync
+    }
+   ```
+
+10. A [`Mutex`](https://doc.rust-lang.org/std/sync/struct.Mutex.html) can be
+    [`poisoned`](https://doc.rust-lang.org/std/sync/struct.PoisonError.html)
+    if a thread panics when holding the lock. Calling `lock()` on a `Mutex` returns
+    a `Result` to determine whether its thread is poisoned.
+
+11. `MutexGuard` returned by `lock()` will be dropped at the end of the statement.
+
+    ```rust
+    // case 1
+    // this keep the guard until the end of the if block
+    if let Some(item) = list.lock().unwrap().pop() {
+        process_item(item);
+    } // guard dropped here
+
+    // case 2
+    let item = list.lock().unwrap().pop();
+    // guard dropped here
+    if let Some(item) = item {
+        process_item(item);
+    }
+    ```
+
+12. Thread can [`park`](https://doc.rust-lang.org/std/thread/fn.park.html) itself
+    and go into sleep, while other thread can [`unpark`](https://doc.rust-lang.org/std/thread/struct.Thread.html#method.unpark)
+    the parked thread.
+
+    ```rust
+    use std::{collections::VecDeque, sync::Mutex, thread, time::Duration};
+
+    fn main() {
+        let queue = Mutex::new(VecDeque::new());
+        thread::scope(|s| {
+            let t = s.spawn(|| {
+                loop {
+                    let v = queue.lock().unwrap().pop_front();
+                    if let Some(v) = v {
+                        dbg!(v);
+                    } else {
+                        thread::park();
+                    }
+                }
+            });
+
+            for i in 0.. {
+                queue.lock().unwrap().push_back(i);
+                t.thread().unpark();
+                thread::sleep(Duration::from_millis(500));
+            }
+        });
+    }
+    ```
+
+13. [`Condition Variables`](https://doc.rust-lang.org/std/sync/struct.Condvar.html)
+    can be used to wait and notify threads. Threads can wait on a condition variable
+    and be waked up later when another thread notifies the same condition variable.
+
+    ```rust
+    use std::{
+        collections::VecDeque,
+        sync::{Condvar, Mutex},
+        thread,
+        time::Duration,
+    };
+
+    fn main() {
+        let queue = Mutex::new(VecDeque::new());
+        let not_empty = Condvar::new();
+        thread::scope(|s| {
+            s.spawn(|| {
+                loop {
+                    let mut guard = not_empty
+                        .wait_while(queue.lock().unwrap(), |q| q.is_empty())
+                        .unwrap();
+                    dbg!(guard.pop_front().unwrap());
+                }
+            });
+
+            for i in 0.. {
+                queue.lock().unwrap().push_back(i);
+                not_empty.notify_one();
+                thread::sleep(Duration::from_millis(500));
+            }
+        });
+    }
+    ```
+
+## Chapter 2: Atomics
+
+1. `compare_exchange` are compare-and-swap operation in Rust.
+   `compare_exchange_week` is similar to `compare_exchange` but it can fail.
+   `compare_exchange_week` should be prefer to `compare_exchange` if the consequence
+   of the failure is insignificant.
+
+   ```rust
+    // allocation without overflow
+    fn allocation_new_id() -> u32 {
+        static NEXT_ID = AtomicU32::new(0);
+        let mut id = NEXT_ID.load(Relaxed);
+        loop {
+            assert!(id < 1000, "too many IDs!");
+            match NEXT_ID.compare_exchange_week(id, id + 1, Relaxed, Relaxed) {
+                Ok(_) => return id,
+                Err(v) = id = v;
+            }
+        }
+    }
+   ```
+
+   We can replace the loop above with a convenience method
+   [`fetch_update`](https://doc.rust-lang.org/std/sync/atomic/struct.AtomicU32.html#method.fetch_update)
+
+2. Lazy initialization
+
+   Simple implementation of Lazy initialization can create thundering herd.
+
+   ```rust
+    fn lazy_init() -> i32 {
+        static VALUE = AtomicI32::new(0);
+        let mut value = VALUE.load(Relaxed); // <-- lots of threads execute this and return 0 at the same time
+        if value == 0 { // <-- this check is true for *lots of threads*
+            value = compute(); // <-- *lots of threads* execute this
+            VALUE.store(value, Relaxed)
+        }
+    }
+   ```
+
+   This can be avoid with `compare_exchange` operation
+
+   ```rust
+    static UNINITIALIZED = 0;
+    static INITIALIZING = 1;
+
+    fn lazy_init() -> i32 {
+        static VALUE = AtomicI32::new(UNINITIALIZED);
+        if VALUE.compare_exchange(UNINITIALIZED, INITIALIZING, Relaxed, Relaxed) == UNINITIALIZED { // <-- only one thread can win this
+            let value = compute();
+            VALUE.store(value, Relaxed);
+        }
+    }
+   ```
+
+## Chapter 3: Memory Ordering
+
+1. Everything happens within the same thread happens in order.
+
+2. Using `Relaxed` results in no memory ordering.
+   The compiler free to reorder instructions in more performant ways.
+
+   Suppose `a()` and `b()` are executed by different threads.
+
+   ```rust
+    static X: AtomicI32 = AtomicI32::new(0);
+    static Y: AtomicI32 = AtomicI32::new(0);
+
+    fn a() {
+        X.store(10, Relaxed); // 1
+        Y.store(20, Relaxed); // 2
+    }
+
+    fn b() {
+        let y = Y.load(Relaxed); // 3
+        let x = X.load(Relaxed); // 4
+        println!("{x} {y}");
+    }
+   ```
+
+   The output can be (easy):
+
+   - 10 20: 1 -> 2 -> 3 -> 4
+   - 0 0: 3 -> 4 -> 1 -> 2
+   - 10 0: 1 -> 3 -> 4 -> 2
+
+   However, it can also be 20 0. Because the compiler can reorder instructions.
+
+   - 3 does not depend on 2, so output of 3 can be 0 or 20.
+   - 4 does not depend on 1, so output of 4 can be 0 or 10.
+
+3. Spawning and Joining threads result in happens-before relationship.
+
+   Given the following example, it can never fail.
+
+   ```rust
+    static X = AtomicI32::new(0);
+
+    fn main() {
+        X.store(1, Relaxed);
+        let t = thread::spawn(f);
+        X.store(2, Relaxed);
+        t.join().unwrap();
+        X.store(3, Relaxed);
+    }
+
+    fn f() {
+        let x = X.load(Relaxed);
+        assert!(x == 1 || x == 2);
+    }
+   ```
+
+   - The spawn of `t` happens after the `X.store(1, Relaxed)`,
+     which means `X` can never be 0 in `f()`.
+   - The join of `t` happens after the `X.store(2, Relaxed)`,
+     which means `X` can be `2` or `1`, but never be `3`.
+
+   ![image](https://marabos.nl/atomics/images/raal_0302.png)
+
+4. Release and Acquire can create happens-before relationship between threads.
+
+   From the [nomicon book](https://doc.rust-lang.org/nomicon/atomics.html#acquire-release)
+
+   - operations occur after an acquire stay after it.
+   - operations occur before a release stay before it.
+
+   ```rust
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::thread;
+
+    fn main() {
+        let lock = Arc::new(AtomicBool::new(false)); // value answers "am I locked?"
+
+        // ... distribute lock to threads somehow ...
+
+        // Try to acquire the lock by setting it to true
+        while lock.compare_and_swap(false, true, Ordering::Acquire) { }
+        // broke out of the loop, so we successfully acquired the lock!
+
+        // ... scary data accesses ...
+
+        // ok we're done, release the lock
+        lock.store(false, Ordering::Release);
+    }
+   ```
+
+   From the book:
+
+   ```rust
+    use std::sync::atomic::Ordering::{Acquire, Release};
+
+    static DATA: AtomicU64 = AtomicU64::new(0);
+    static READY: AtomicBool = AtomicBool::new(false);
+
+    fn main() {
+        thread::spawn(|| {
+            DATA.store(123, Relaxed);
+            READY.store(true, Release); // Everything from before this store ..
+        });
+        while !READY.load(Acquire) { // .. is visible after this loads `true`.
+            thread::sleep(Duration::from_millis(100));
+            println!("waiting...");
+        }
+        println!("{}", DATA.load(Relaxed));
+    }
+   ```
+
+   ![image](https://marabos.nl/atomics/images/raal_0303.png)
+
+5. Consumer ordering is lightweight synchronization depends on the loaded value.
+   Where consume-load of a value happens after release-store for that value
+
+6. [`SeqCst`](https://doc.rust-lang.org/std/sync/atomic/enum.Ordering.html#variant.SeqCst) (sequential ordering)
+   is the strongest memory ordering it can replace both `Acquire` and `Release`.
+   _In practice, we never need to use sequential ordering_.
+
+7. [`fence`](https://doc.rust-lang.org/std/sync/atomic/fn.fence.html)
+   allows separating memory ordering from atomic operation.
+
+   - a release-store `x.store(Release)` can be broken down to a `fence(Release)` and a `x.store(Relaxed)`.
+   - a acquire-load `x.load(Acquire)` can be broken down to a `x.load(Relaxed)` and a `fence(Acquire)`.
+
+   Separating `PTR.load(Acquire)` to use `Relaxed` with `fence(Acquire)` in the following example
+   allowing to only use acquire release relationship when `p` is not null.
+
+   ```rust
+   let p = PTR.load(Relaxed);
+   if p.is_null() {
+       println!("no data");
+   } else {
+       fence(Acquire);
+       println!("data = {}", unsafe { *p });
+   }
+   ```
+
+   A more complicated example:
+
+   ```rust
+   use std::sync::atomic::fence;
+
+   static mut DATA: [u64; 10] = [0; 10];
+
+   const ATOMIC_FALSE: AtomicBool = AtomicBool::new(false);
+   static READY: [AtomicBool; 10] = [ATOMIC_FALSE; 10];
+
+   fn main() {
+       for i in 0..10 {
+           thread::spawn(move || {
+               let data = some_calculation(i);
+               unsafe { DATA[i] = data };
+               READY[i].store(true, Release);
+           });
+       }
+       thread::sleep(Duration::from_millis(500));
+       let ready: [bool; 10] = std::array::from_fn(|i| READY[i].load(Relaxed));
+       if ready.contains(&true) {
+           fence(Acquire); // <-- only use acquire memory ordering if one of the data is ready.
+           for i in 0..10 {
+               if ready[i] {
+                   println!("data{i} = {}", unsafe { DATA[i] });
+               }
+           }
+       }
+   }
+   ```
+
+## Chapter 4: SpinLock
+
+[Safe guard SpinLock](./src/bin/chapter4-safe-guard-spin-lock.rs)

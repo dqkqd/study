@@ -24,3 +24,7 @@
 ## Web
 
 - [Zero To Production In Rust](https://github.com/dqkqd/zero2prod)
+
+## Misc
+
+- [Rust Atomics and Locks](./rust/rust-atomics-and-locks/readme.md)
