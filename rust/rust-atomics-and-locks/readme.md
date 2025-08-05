@@ -397,6 +397,38 @@ Notes and exercises from [Rust Atomics and Locks](https://marabos.nl/atomics/).
 
    ![image](https://marabos.nl/atomics/images/raal_0303.png)
 
+   Let's see an example from [`swap`](https://doc.rust-lang.org/std/sync/atomic/struct.AtomicBool.html#method.swap)
+
+   ```
+   Stores a value into the bool, returning the previous value.
+
+   swap takes an Ordering argument which describes the memory ordering of this operation.
+   All ordering modes are possible. Note that using Acquire makes the store part of this
+   operation Relaxed, and using Release makes the load part Relaxed.
+
+   Note: This method is only available on platforms that support atomic operations on u8.
+   ```
+
+   Suppose we are using `Acquire` for `swap`, the operations become:
+
+   ```rust
+   let old = self.load(Acquire);
+   self.store(new, Relaxed);
+   return old
+   ```
+
+   Since `Acquire` makes all operations after it stay after it. We can never have
+   cases that `store` stores `new` into `self` before `load`.
+
+   Similar to `Release`, we can never have cases that `load` loads `new` from
+   `self`.
+
+   ```rust
+   let old = self.load(Relaxed);
+   self.store(new, Release);
+   return old
+   ```
+
 5. Consumer ordering is lightweight synchronization depends on the loaded value.
    Where consume-load of a value happens after release-store for that value
 
@@ -457,3 +489,11 @@ Notes and exercises from [Rust Atomics and Locks](https://marabos.nl/atomics/).
 ## Chapter 4: SpinLock
 
 [Safe guard SpinLock](./src/bin/chapter4-safe-guard-spin-lock.rs)
+
+## Chapter 5: Channels
+
+[Simple Mutex](./src/bin/chapter5-mutex-channel.rs)
+[Oneshot Channel](./src/bin/chapter5-oneshot-channel.rs)
+[Arc Oneshot Channel](./src/bin/chapter5-arc-oneshot-channel.rs)
+[Borrowed Oneshot Channel](./src/bin/chapter5-borrow-oneshot-channel.rs)
+[Blocking Oneshot Channel](./src/bin/chapter5-blocking-oneshot-channel.rs)
