@@ -497,3 +497,28 @@ Notes and exercises from [Rust Atomics and Locks](https://marabos.nl/atomics/).
 [Arc Oneshot Channel](./src/bin/chapter5-arc-oneshot-channel.rs)
 [Borrowed Oneshot Channel](./src/bin/chapter5-borrow-oneshot-channel.rs)
 [Blocking Oneshot Channel](./src/bin/chapter5-blocking-oneshot-channel.rs)
+
+## Chapter 6: Arc
+
+From the drop implementation in [Basic Reference Counting](https://marabos.nl/atomics/building-arc.html#basic-reference-counting),
+why we choose `Release` for `fetch_sub` and call `fence(Acquire)` later?
+
+```rust
+    impl<T> Drop for Arc<T> {
+        fn drop(&mut self) {
+            if self.data().ref_count.fetch_sub(1, Ordering::Release) == 1 {
+                fence(Ordering::Acquire);
+                unsafe { drop(Box::from_raw(self.ptr.as_ptr())) }
+            }
+        }
+    }
+```
+
+Quote back from the [nomicon book](https://doc.rust-lang.org/nomicon/atomics.html#acquire-release)
+
+- Acquire: operations occur after stay after.
+- Release: operations occur before stay before.
+
+Using `Release` ensures each thread drop happens before the final.
+Using `fence(Acquire)` ensures the final thread see all the changes from the `Release` drop.
+Otherwise, no happens-before relationship can be establish.
