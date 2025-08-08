@@ -522,3 +522,196 @@ Quote back from the [nomicon book](https://doc.rust-lang.org/nomicon/atomics.htm
 Using `Release` ensures each thread drop happens before the final.
 Using `fence(Acquire)` ensures the final thread see all the changes from the `Release` drop.
 Otherwise, no happens-before relationship can be establish.
+
+## Chapter 7: Processor
+
+1. x86 use `lock` prefix for `fetch_add`.
+
+   ```rust
+   pub fn a(x: &AtomicI32) {
+       x.fetch_add(10, Relaxed);
+   }
+   ```
+
+   Is compiled to:
+
+   ```asm
+    a:
+        lock add dword ptr [rdi], 10
+        ret
+   ```
+
+2. x86 use `lock` with label for `fetch_or`.
+
+   ```rust
+   pub fn a(x: &AtomicI32) -> i32 {
+       x.fetch_or(10, Ordering::Relaxed)
+   }
+   ```
+
+   It takes the value from `eax` at every iteration (the `mov ecx, eax` line) -
+   this means if other threads execute the same instruction, they also write
+   to the same `eax` register.
+   Then it performs `or` operation and compare and exchange the value.
+
+   ```asm
+   a:
+           mov     eax, dword ptr [rdi]
+   .LBB0_1:
+           mov     ecx, eax
+           or      ecx, 10
+           lock    cmpxchg dword ptr [rdi], ecx
+           jne     .LBB0_1
+           ret
+   ```
+
+3. Store-Conditional instruction refuses to store memory if any other thread
+   has overwritten that memory since the load-linked instruction.
+
+   - only one memory address per core can be tracked.
+   - store-conditional has false negative, it can fail even the memory hasn't
+     changed.
+
+   Here is a `fetch_add` example.
+
+   ```rust
+   pub fn a(x: &AtomicI32) {
+       x.fetch_add(10, Relaxed);
+   }
+   ```
+
+   ```asm
+    a:
+    .L1:
+        ldxr w8, [x0]       ; load x0 to w8
+        add w9, w8, #10     ; add 10 to w8 and store to w9
+        stxr w10, w9, [x0]  ; store-conditional w9 to x0, return success/fail to w10
+        cbnz w10, .L1       ; loopback if w10 failed, otherwise break
+        ret
+   ```
+
+   Here is a `compare_exchange_weak` example (the exchange can fail)
+
+   ```rust
+    pub fn a(x: &AtomicI32) {
+        x.compare_exchange_weak(5, 6, Relaxed, Relaxed);
+    }
+   ```
+
+   ```asm
+    a:
+        ldxr w8, [x0]       ; load x0 to w8
+        cmp w8, #5          ; compare w8 with 5
+        b.ne .L1            ; if it is not equal, jump to L1 (which is clear the result and return)
+        mov w8, #6          ; move 6 to w8
+        stxr w9, w8, [x0]   ; store-conditional w8 back to x0, return success/fail to w9
+        ret                 ; just return, do not care about w9 result
+    .L1:
+        clrex
+        ret
+   ```
+
+4. write-through protocol does not cache writes, but sends those writes to the
+   next layer - which has a shared communication channel - so that they can be
+   observed by other threads.
+
+5. The MESI protocol allows caches from a thread to communicate with other
+   threads at the same cache level. If a cache miss occurs, it asks other
+   threads in the same cache level whether they have the cached values,
+   if all of them say no, it checks the next cache layer.
+
+6. [`black_box(x)`](https://doc.rust-lang.org/std/hint/fn.black_box.html)
+   tells the compiler that `x` is being used. This function is useful for
+   benchmarking, avoiding the compiler to optimize the operations that we are
+   trying to benchmark.
+
+   ```rust
+    use std::hint::black_box;
+
+    static A: AtomicU64 = AtomicU64::new(0);
+
+    fn main() {
+        black_box(&A); // New!
+        let start = Instant::now();
+        for _ in 0..1_000_000_000 {
+            black_box(A.load(Relaxed)); // New!
+        }
+        println!("{:?}", start.elapsed());
+    }
+   ```
+
+7. Caching happens per _cache line_, which is usually 64 byte.
+
+   The main thread only loads `A[1]`, the background thread store `A[0]` and `A[2]`.
+   Even though they are separated elements, they share the same cache line.
+   Thus both storing `A[0], A[2]` and loading `A[1]` need to lock the same cache line.
+
+   ```rust
+   static A: [AtomicU64; 3] = [
+       AtomicU64::new(0),
+       AtomicU64::new(0),
+       AtomicU64::new(0),
+   ];
+
+   fn main() {
+       black_box(&A);
+       thread::spawn(|| {
+           loop {
+               A[0].store(0, Relaxed);
+               A[2].store(0, Relaxed);
+           }
+       });
+       let start = Instant::now();
+       for _ in 0..1_000_000_000 {
+           black_box(A[1].load(Relaxed));
+       }
+       println!("{:?}", start.elapsed());
+   }
+   ```
+
+   Having known the cache line is 64 bytes, we can align each element with 64 bytes.
+   This allows `A[0], A[2]` and `A[1]` to be executed separately without locking.
+
+   ```rust
+    #[repr(align(64))] // This struct must be 64-byte aligned.
+    struct Aligned(AtomicU64);
+
+    static A: [Aligned; 3] = [
+        Aligned(AtomicU64::new(0)),
+        Aligned(AtomicU64::new(0)),
+        Aligned(AtomicU64::new(0)),
+    ];
+
+    fn main() {
+        black_box(&A);
+        thread::spawn(|| {
+            loop {
+                A[0].0.store(1, Relaxed);
+                A[2].0.store(1, Relaxed);
+            }
+        });
+        let start = Instant::now();
+        for _ in 0..1_000_000_000 {
+            black_box(A[1].0.load(Relaxed));
+        }
+        println!("{:?}", start.elapsed());
+   }
+   ```
+
+   When multiple atomic variables are related, putting them close to others (to the
+   same cache line) can avoid multiple lockings.
+
+8. Instructions can happen out of order, here are some examples:
+
+   - Buffered writes: write can be buffered, while processors can execute the
+     next instructions without waiting.
+   - Invalidation caches: caches can be invalidated, however the invalidations
+     are asynchronously executed to avoid blocking, results in slightly staled
+     cache.
+   - Pipelining: instructions can be executed in parallel making they being
+     reordered.
+
+9. x86-64 is strongly ordered, most its operations are not reordered. Relaxed
+   operations cost as "expensive" as Acquire / Release operations.
+   ARM64 is weakly ordered, their Relexed operations is not the same as
+   Acquire / Release.
