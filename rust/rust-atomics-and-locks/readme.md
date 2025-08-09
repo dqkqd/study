@@ -758,3 +758,125 @@ operations cost as "expensive" as Acquire / Release operations.
 
 ARM64 is weakly ordered, their Relexed operations is not the same as
 Acquire / Release.
+
+## Chapter 8: Operating System
+
+### pthread
+
+`pthread` provides several synchronizations using `pthread_mutex_t`,
+`pthread_rwlock_t`, `pthread_cond_t`, etc. Each of them has their own `init()`
+and `destroy()` methods.
+
+Calling `pthread` can be done using [`libc`](https://docs.rs/crate/libc/latest)
+crate in Rust.
+However, wrapping `pthread` syscall using `libc` in Rust is not straightforward
+because Rust's ownership model _moves_ values around.
+For example, in C, lock and unlock look at a specific atomic variable address,
+this can't be done in Rust because when unlock is called, the atomic variable's
+address may have changed.
+
+### Futex
+
+Futex (fast user-space mutex) is a user-space locking technique with minimal
+kernel involvement.
+
+It has two main syscalls
+
+- wait: puts thread to sleep, it takes a 32-bit integer and compares it with the
+  internal 32-bit atomic value to decide whether sleeping should occur.
+- wake: wakes the waiting threads, then increments the internal atomic value.
+  Two important notes:
+
+- A wake can be lost if it is called _right before_ wait. Therefore, we allow
+  wakes to apply to the next wait as well.
+- A wake has two operations: increment the internal atomic value, wake the
+  waiting thread. The increment must complete before waking threads; otherwise,
+  a thread might wait _after_ being woken but _before_ seeing the updated
+  value. Consider the following examples with the initial atomic value is 0.
+
+  Incorrect implementation
+
+  | thread 1            | thread 2                                      |
+  | ------------------- | --------------------------------------------- |
+  | wake                |                                               |
+  |                     | value == 0 => true => wait (already woken up) |
+  | increment value = 1 |                                               |
+
+  Correct implementation
+
+  | thread 1            | thread 2                                            |
+  | ------------------- | --------------------------------------------------- |
+  |                     | case 1: value == 0 => true => wait (woken up later) |
+  | increment value = 1 |                                                     |
+  |                     | case 2: value == 0 => false => not waiting          |
+  | wake                |                                                     |
+
+### Futex Rust wrapper
+
+[Here is the brief wrapper around futex, using `libc`](./src/bin/chapter8-futex.rs)
+
+Using futexes allows the program to specify the waiting _state_. For example, if we
+set `a = 1` initially, we can skip waiting entirely.
+This provides more control and flexibility for optimization.
+
+### API for futex syscall
+
+- FUTEX_WAIT:
+  - internal 32-bit atomic integer
+  - operation name: FUTEX_WAIT
+  - expected value: value to check whether to sleep.
+  - max time to wait
+- FUTEX_WAKE:
+  - internal 32-bit atomic integer
+  - operation name: FUTEX_WAKE
+  - number of threads to wake
+- FUTEX_WAIT_BITSET:
+  - internal 32-bit atomic integer
+  - operation name: FUTEX_WAIT_BITSET
+  - expected value: value to check whether to sleep.
+  - max time to wait
+  - ignored pointer
+  - bitset: set the bitset so that only FUTEX_WAKE_BITSET with overlapping
+    bitset can wake this thread up.
+- FUTEX_WAKE_BITSET:
+  - internal 32-bit atomic integer
+  - operation name: FUTEX_WAKE_BITSET
+  - number of threads to wake
+  - ignored pointer
+  - ignored pointer
+  - bitset: only wakes waiting thread with overlapping bitset set by
+    FUTEX_WAIT_BITSET.
+- FUTEX_REQUEUE:
+  - internal 32-bit atomic integer
+  - operation name: FUTEX_REQUEUE
+  - number of threads to wake
+  - number of threads to requeue: after waking up some number of waiting
+    threads, this requeues some of remaining threads to wait on the second
+    atomic variable.
+  - address of secondary atomic variable
+- FUTEX_CMP_REQUEUE
+  - internal 32-bit atomic integer
+  - operation name: FUTEX_CMP_REQUEUE
+  - number of threads to wake
+  - number of threads to requeue
+  - address of secondary atomic variable
+  - expected value of the second atomic variable: similar to FUTEX_REQUEUE, but
+    requires expected atomic value to decide whether it should requeue.
+- FUTEX_WAKE_OP:
+
+  - internal 32-bit atomic integer
+  - operation name: FUTEX_WAKE_OP
+  - number of threads to wake on primary atomic variable
+  - number of threads to wake on secondary atomic variable
+  - address of secondary atomic variable
+  - comparison operations and arguments: can be ==, !=, <, <=, >, and >=, this
+    wakes threads waiting on the first variable, and _conditionally_ on
+    the second variable.
+
+    ```rust
+    let old = atomic2.fetch_update(Relaxed, Relaxed, some_operation);
+    wake(atomic1, N);
+    if some_condition(old) {
+        wake(atomic2, M);
+    }
+    ```
