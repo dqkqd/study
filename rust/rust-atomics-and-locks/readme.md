@@ -1,7 +1,8 @@
 # Rust Atomics and Locks
 
 Notes and exercises from [Rust Atomics and Locks](https://marabos.nl/atomics/).
-(_however, I only note what I did not know_).
+
+**Note**: this document only covers topic from the book that were new to me.
 
 ## Chapter 1: Basics
 
@@ -880,3 +881,57 @@ This provides more control and flexibility for optimization.
         wake(atomic2, M);
     }
     ```
+
+## Chapter 9: Locks
+
+### Locks
+
+[locks](./src/bin/chapter9-lock.rs)
+
+[locks with spinloop](./src/bin/chapter9-lock-spinloop.rs)
+
+### Condvar
+
+#### Condvar
+
+[condvar](./src/bin/chapter9-condvar.rs)
+
+Condvar's `counter` has a guaranteed happens-before relationship.
+The `counter`'s in `Condvar::wait` comes before the unlock, which comes before the lock, which
+comes before the `counter`'s increment in `Condvar::notify`.
+
+Therefore, we can use `Relaxed` ordering in this case.
+
+![condvar-happens-before](https://marabos.nl/atomics/images/raal_0902.png)
+
+#### Optimized Condvar
+
+[optimized condvar](./src/bin/chapter9-condvar-avoid-syscalls.rs)
+
+Reduce number of syscall by tracking the number of waiters (`num_waiters`) and only invoke
+`wake` syscalls if `num_waiters` is higher than 0.
+`num_waiters` increases before the `unlock` and decreases after the `wait` syscalls.
+
+Similar to Condvar's `counter`, we can apply some of these ordering to
+`num_waiters`.
+We can see that there are happens-before relationship between the increment and
+the decrement, and between the increment and the load.
+The order between the load and the decrement doesn't matter:
+
+- if the load see the value _before_ the decrement, it can send the notification
+  correctly.
+- if the load see the value _after_ the decrement, then the decrement has been
+  executed succesefully, and the waiting thread no longer need to be woken up.
+
+There are races where many threads trying to acquire the same lock.
+For example:
+
+- Thread 1 has just loaded the `counter` and is ready to call `wait`
+  in `Condvar::wait`.
+- Thread 2 gives up the lock, triggers `notify_one`, and updates `counter`.
+- Thread 1 cannot go to sleep because the `counter` has changed, it also has to
+  compete with an extra woken up thread by the `notify_one` call.
+
+### Reader-Writer Lock
+
+[reader writer lock](./src/bin/chapter9-reader-writer-lock.rs);
