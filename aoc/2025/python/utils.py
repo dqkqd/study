@@ -1,14 +1,14 @@
-from collections.abc import Iterable
 from pathlib import Path
+from typing import TextIO
 
 
-def example(day: int) -> Iterable[str]:
+def example(day: int) -> TextIO:
     input_dir = find_input_dir()
     path = input_dir / f"day{day:02}" / "example.txt"
     return path.open()
 
 
-def actual(day: int) -> Iterable[str]:
+def actual(day: int) -> TextIO:
     input_dir = find_input_dir()
     path = input_dir / f"day{day:02}" / "actual.txt"
     return path.open()

@@ -1,6 +1,6 @@
-from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import TextIO
 from utils import actual, example
 
 
@@ -54,7 +54,7 @@ class Dial:
             self.stop_at_zero += 1
 
 
-def solve(lines: Iterable[str]):
+def solve(lines: TextIO):
     dial = Dial(50, 0, 0)
     for line in lines:
         rotation = Rotation.from_str(line)
