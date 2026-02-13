@@ -4,7 +4,13 @@ version = "0.1.0"
 description = "TDOP"
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "typer>=0.23.1",
+]
 
 [dependency-groups]
-dev = ["ruff>=0.15.0"]
+dev = [
+    "pytest>=9.0.2",
+    "ruff>=0.15.0",
+    "ty>=0.0.17",
+]
