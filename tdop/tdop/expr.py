@@ -9,7 +9,7 @@ class Expr(ABC):
     def __repr__(self) -> str: ...
 
     @abstractmethod
-    def evalulate(self) -> int: ...
+    def evalulate(self) -> float: ...
 
 
 @t.final
@@ -22,7 +22,7 @@ class LiteralExpr(Expr):
         return str(self.value)
 
     @t.override
-    def evalulate(self) -> int:
+    def evalulate(self) -> float:
         return self.value
 
 
@@ -39,7 +39,7 @@ class AddExpr(Expr):
         return f"(+ {self.lhs} {self.rhs})"
 
     @t.override
-    def evalulate(self) -> int:
+    def evalulate(self) -> float:
         if self.lhs is None:
             return self.rhs.evalulate()
         return self.lhs.evalulate() + self.rhs.evalulate()
@@ -58,7 +58,37 @@ class SubExpr(Expr):
         return f"(- {self.lhs} {self.rhs})"
 
     @t.override
-    def evalulate(self) -> int:
+    def evalulate(self) -> float:
         if self.lhs is None:
             return -self.rhs.evalulate()
         return self.lhs.evalulate() - self.rhs.evalulate()
+
+
+@t.final
+@dataclass(kw_only=True)
+class MulExpr(Expr):
+    lhs: Expr
+    rhs: Expr
+
+    @t.override
+    def __repr__(self) -> str:
+        return f"(* {self.lhs} {self.rhs})"
+
+    @t.override
+    def evalulate(self) -> float:
+        return self.lhs.evalulate() * self.rhs.evalulate()
+
+
+@t.final
+@dataclass(kw_only=True)
+class DivExpr(Expr):
+    lhs: Expr
+    rhs: Expr
+
+    @t.override
+    def __repr__(self) -> str:
+        return f"(/ {self.lhs} {self.rhs})"
+
+    @t.override
+    def evalulate(self) -> float:
+        return self.lhs.evalulate() / self.rhs.evalulate()

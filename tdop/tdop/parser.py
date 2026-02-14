@@ -1,4 +1,4 @@
-from tdop.expr import AddExpr, Expr, LiteralExpr, SubExpr
+from tdop.expr import AddExpr, DivExpr, Expr, LiteralExpr, MulExpr, SubExpr
 from tdop.token import Token, TokenType, Tokenizer
 import typing as t
 
@@ -45,6 +45,27 @@ class PrefixParser:
         return inner
 
 
+@PrefixParser.register(TokenType.Literal)
+def _(_: Tokenizer, token: Token) -> LiteralExpr:
+    assert token.token_type == TokenType.Literal
+    assert token.value.isdigit()
+    return LiteralExpr(value=int(token.value))
+
+
+@PrefixParser.register(TokenType.Add)
+def _(tokenizer: Tokenizer, token: Token) -> AddExpr:
+    assert token.token_type == TokenType.Add
+    rhs = parse_expr(tokenizer)
+    return AddExpr(lhs=None, rhs=rhs)
+
+
+@PrefixParser.register(TokenType.Sub)
+def _(tokenizer: Tokenizer, token: Token) -> SubExpr:
+    assert token.token_type == TokenType.Sub
+    rhs = parse_expr(tokenizer)
+    return SubExpr(lhs=None, rhs=rhs)
+
+
 type InfixParserFn = t.Callable[[Tokenizer, Expr, Token], Expr]
 
 
@@ -67,27 +88,6 @@ class InfixParser:
         return inner
 
 
-@PrefixParser.register(TokenType.Literal)
-def _(_: Tokenizer, token: Token) -> LiteralExpr:
-    assert token.token_type == TokenType.Literal
-    assert token.value.isdigit()
-    return LiteralExpr(value=int(token.value))
-
-
-@PrefixParser.register(TokenType.Add)
-def _(tokenizer: Tokenizer, token: Token) -> AddExpr:
-    assert token.token_type == TokenType.Add
-    rhs = parse_expr(tokenizer)
-    return AddExpr(lhs=None, rhs=rhs)
-
-
-@PrefixParser.register(TokenType.Sub)
-def _(tokenizer: Tokenizer, token: Token) -> SubExpr:
-    assert token.token_type == TokenType.Sub
-    rhs = parse_expr(tokenizer)
-    return SubExpr(lhs=None, rhs=rhs)
-
-
 @InfixParser.register(TokenType.Add)
 def _(tokenizer: Tokenizer, lhs: Expr, token: Token) -> AddExpr:
     assert token.token_type == TokenType.Add
@@ -100,3 +100,17 @@ def _(tokenizer: Tokenizer, lhs: Expr, token: Token) -> SubExpr:
     assert token.token_type == TokenType.Sub
     rhs = parse_expr(tokenizer)
     return SubExpr(lhs=lhs, rhs=rhs)
+
+
+@InfixParser.register(TokenType.Mul)
+def _(tokenizer: Tokenizer, lhs: Expr, token: Token) -> MulExpr:
+    assert token.token_type == TokenType.Mul
+    rhs = parse_expr(tokenizer)
+    return MulExpr(lhs=lhs, rhs=rhs)
+
+
+@InfixParser.register(TokenType.Div)
+def _(tokenizer: Tokenizer, lhs: Expr, token: Token) -> DivExpr:
+    assert token.token_type == TokenType.Div
+    rhs = parse_expr(tokenizer)
+    return DivExpr(lhs=lhs, rhs=rhs)

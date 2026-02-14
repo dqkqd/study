@@ -9,6 +9,7 @@ class TokenType(enum.StrEnum):
     Add = enum.auto()
     Sub = enum.auto()
     Mul = enum.auto()
+    Div = enum.auto()
     Eof = enum.auto()
 
 
@@ -28,6 +29,8 @@ class Token(ABC):
                 return Token.sub()
             case "*":
                 return Token.mul()
+            case "/":
+                return Token.div()
             case _:
                 raise SyntaxError(f"bad token: {s}")
 
@@ -46,6 +49,10 @@ class Token(ABC):
     @classmethod
     def mul(cls) -> Token:
         return Token(token_type=TokenType.Mul, value="*")
+
+    @classmethod
+    def div(cls) -> Token:
+        return Token(token_type=TokenType.Div, value="/")
 
     @classmethod
     def eof(cls) -> Token:
