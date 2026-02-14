@@ -5,42 +5,52 @@ import typing as t
 
 def parse(program: str) -> Expr:
     tokenizer = Tokenizer.from_str(program)
-    return parse_expr(tokenizer)
+    return parse_expr(tokenizer, binding_power=0)
 
 
-def parse_expr(tokenizer: Tokenizer) -> Expr:
-    token = tokenizer.next()
+def parse_expr(tokenizer: Tokenizer, binding_power: int) -> Expr:
+    lhs = PrefixParser.parse(tokenizer, tokenizer.next())
 
-    prefix = PrefixParser.get(token.token_type)
-    lhs = prefix(tokenizer, token)
-
-    current_token = tokenizer.peek()
-    if current_token is not None and current_token != Token.eof():
-        infix = InfixParser.get(current_token.token_type)
+    token = tokenizer.peek()
+    while (
+        token is not None
+        and token != Token.eof()
+        and binding_power < InfixParser.binding_powers[token.token_type]
+    ):
+        # skip this operator
         _ = tokenizer.next()
-        lhs = infix(tokenizer, lhs, current_token)
+        lhs = InfixParser.parse(tokenizer, lhs, token)
+        token = tokenizer.peek()
 
     return lhs
 
 
-type PrefixParserFn = t.Callable[[Tokenizer, Token], Expr]
-
-
 class PrefixParser:
-    inner: t.ClassVar[dict[TokenType, PrefixParserFn]] = {}
+    type Fn = t.Callable[[Tokenizer, Token], Expr]
+
+    parsers: t.ClassVar[dict[TokenType, Fn]] = {}
+
+    binding_powers: dict[TokenType, int] = {
+        TokenType.Literal: 10,
+        TokenType.Add: 100,
+        TokenType.Sub: 100,
+    }
 
     @classmethod
-    def get(cls, token_type: TokenType) -> PrefixParserFn:
-        if token_type not in cls.inner:
-            raise KeyError(f"{token_type} has not been registered to {cls.__name__}")
-        return cls.inner[token_type]
+    def parse(cls, tokenizer: Tokenizer, token: Token) -> Expr:
+        if token.token_type not in cls.parsers:
+            raise KeyError(
+                f"{token.token_type} has not been registered to {cls.__name__}"
+            )
+        parser = cls.parsers[token.token_type]
+        return parser(tokenizer, token)
 
     @classmethod
     def register(cls, token_type: TokenType):
-        def inner(fn: PrefixParserFn):
-            if token_type in cls.inner:
+        def inner(fn: PrefixParser.Fn):
+            if token_type in cls.parsers:
                 raise KeyError(f"{token_type} is already exist in {cls.__name__}")
-            cls.inner[token_type] = fn
+            cls.parsers[token_type] = fn
 
         return inner
 
@@ -55,35 +65,45 @@ def _(_: Tokenizer, token: Token) -> LiteralExpr:
 @PrefixParser.register(TokenType.Add)
 def _(tokenizer: Tokenizer, token: Token) -> AddExpr:
     assert token.token_type == TokenType.Add
-    rhs = parse_expr(tokenizer)
+    rhs = parse_expr(tokenizer, PrefixParser.binding_powers[token.token_type])
     return AddExpr(lhs=None, rhs=rhs)
 
 
 @PrefixParser.register(TokenType.Sub)
 def _(tokenizer: Tokenizer, token: Token) -> SubExpr:
     assert token.token_type == TokenType.Sub
-    rhs = parse_expr(tokenizer)
+    rhs = parse_expr(tokenizer, PrefixParser.binding_powers[token.token_type])
     return SubExpr(lhs=None, rhs=rhs)
 
 
-type InfixParserFn = t.Callable[[Tokenizer, Expr, Token], Expr]
-
-
 class InfixParser:
-    inner: t.ClassVar[dict[TokenType, InfixParserFn]] = {}
+    type Fn = t.Callable[[Tokenizer, Expr, Token], Expr]
+
+    parsers: t.ClassVar[dict[TokenType, Fn]] = {}
+
+    binding_powers: dict[TokenType, int] = {
+        TokenType.Literal: 10,
+        TokenType.Add: 20,
+        TokenType.Sub: 20,
+        TokenType.Mul: 30,
+        TokenType.Div: 30,
+    }
 
     @classmethod
-    def get(cls, token_type: TokenType) -> InfixParserFn:
-        if token_type not in cls.inner:
-            raise KeyError(f"{token_type} has not been registered to {cls.__name__}")
-        return cls.inner[token_type]
+    def parse(cls, tokenizer: Tokenizer, expr: Expr, token: Token) -> Expr:
+        if token.token_type not in cls.parsers:
+            raise KeyError(
+                f"{token.token_type} has not been registered to {cls.__name__}"
+            )
+        parser = cls.parsers[token.token_type]
+        return parser(tokenizer, expr, token)
 
     @classmethod
     def register(cls, token_type: TokenType):
-        def inner(fn: InfixParserFn):
-            if token_type in cls.inner:
+        def inner(fn: InfixParser.Fn):
+            if token_type in cls.parsers:
                 raise KeyError(f"{token_type} is already exist in {cls.__name__}")
-            cls.inner[token_type] = fn
+            cls.parsers[token_type] = fn
 
         return inner
 
@@ -91,26 +111,26 @@ class InfixParser:
 @InfixParser.register(TokenType.Add)
 def _(tokenizer: Tokenizer, lhs: Expr, token: Token) -> AddExpr:
     assert token.token_type == TokenType.Add
-    rhs = parse_expr(tokenizer)
+    rhs = parse_expr(tokenizer, InfixParser.binding_powers[token.token_type])
     return AddExpr(lhs=lhs, rhs=rhs)
 
 
 @InfixParser.register(TokenType.Sub)
 def _(tokenizer: Tokenizer, lhs: Expr, token: Token) -> SubExpr:
     assert token.token_type == TokenType.Sub
-    rhs = parse_expr(tokenizer)
+    rhs = parse_expr(tokenizer, InfixParser.binding_powers[token.token_type])
     return SubExpr(lhs=lhs, rhs=rhs)
 
 
 @InfixParser.register(TokenType.Mul)
 def _(tokenizer: Tokenizer, lhs: Expr, token: Token) -> MulExpr:
     assert token.token_type == TokenType.Mul
-    rhs = parse_expr(tokenizer)
+    rhs = parse_expr(tokenizer, InfixParser.binding_powers[token.token_type])
     return MulExpr(lhs=lhs, rhs=rhs)
 
 
 @InfixParser.register(TokenType.Div)
 def _(tokenizer: Tokenizer, lhs: Expr, token: Token) -> DivExpr:
     assert token.token_type == TokenType.Div
-    rhs = parse_expr(tokenizer)
+    rhs = parse_expr(tokenizer, InfixParser.binding_powers[token.token_type])
     return DivExpr(lhs=lhs, rhs=rhs)
