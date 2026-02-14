@@ -23,20 +23,21 @@ def parse_expr(tokenizer: Tokenizer) -> Expr:
     return lhs
 
 
-class PrefixParser:
-    type Fn = t.Callable[[Tokenizer, Token], Expr]
+type PrefixParserFn = t.Callable[[Tokenizer, Token], Expr]
 
-    inner: t.ClassVar[dict[TokenType, Fn]] = {}
+
+class PrefixParser:
+    inner: t.ClassVar[dict[TokenType, PrefixParserFn]] = {}
 
     @classmethod
-    def get(cls, token_type: TokenType) -> Fn:
+    def get(cls, token_type: TokenType) -> PrefixParserFn:
         if token_type not in cls.inner:
             raise KeyError(f"{token_type} has not been registered to {cls.__name__}")
         return cls.inner[token_type]
 
     @classmethod
     def register(cls, token_type: TokenType):
-        def inner(fn: PrefixParser.Fn):
+        def inner(fn: PrefixParserFn):
             if token_type in cls.inner:
                 raise KeyError(f"{token_type} is already exist in {cls.__name__}")
             cls.inner[token_type] = fn
@@ -44,20 +45,21 @@ class PrefixParser:
         return inner
 
 
-class InfixParser:
-    type Fn = t.Callable[[Tokenizer, Expr, Token], Expr]
+type InfixParserFn = t.Callable[[Tokenizer, Expr, Token], Expr]
 
-    inner: t.ClassVar[dict[TokenType, InfixParser.Fn]] = {}
+
+class InfixParser:
+    inner: t.ClassVar[dict[TokenType, InfixParserFn]] = {}
 
     @classmethod
-    def get(cls, token_type: TokenType) -> InfixParser.Fn:
+    def get(cls, token_type: TokenType) -> InfixParserFn:
         if token_type not in cls.inner:
             raise KeyError(f"{token_type} has not been registered to {cls.__name__}")
         return cls.inner[token_type]
 
     @classmethod
     def register(cls, token_type: TokenType):
-        def inner(fn: InfixParser.Fn):
+        def inner(fn: InfixParserFn):
             if token_type in cls.inner:
                 raise KeyError(f"{token_type} is already exist in {cls.__name__}")
             cls.inner[token_type] = fn
