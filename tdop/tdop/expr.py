@@ -96,6 +96,29 @@ class DivExpr(Expr):
 
 @t.final
 @dataclass(kw_only=True)
+class PowExpr(Expr):
+    base: Expr
+    exponent: Expr
+
+    @t.override
+    def __repr__(self) -> str:
+        return f"(^ {self.base} {self.exponent})"
+
+    @t.override
+    def evalulate(self) -> float:
+        base = self.base.evalulate()
+        exponent = self.exponent.evalulate()
+        match base**exponent:
+            case float(v) | int(v):
+                return v
+            case _:  # pyright: ignore[reportAny]
+                raise ValueError(
+                    f"Unsupported exponent value with base={base}, exponent={exponent}"
+                )
+
+
+@t.final
+@dataclass(kw_only=True)
 class ParenExpr(Expr):
     inner: Expr
 

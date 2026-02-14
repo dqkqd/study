@@ -27,6 +27,9 @@ import tdop
         ("-(2 + 3)", snapshot("(- (+ 2 3))"), snapshot(-5)),
         ("2 * (3 + 4)", snapshot("(* 2 (+ 3 4))"), snapshot(14)),
         ("(3 + 4) * 2", snapshot("(* (+ 3 4) 2)"), snapshot(14)),
+        ("2^3", snapshot("(^ 2 3)"), snapshot(8)),
+        ("2^(3 + 1)", snapshot("(^ 2 (+ 3 1))"), snapshot(16)),
+        ("(2 + 1)^(3 + 1)", snapshot("(^ (+ 2 1) (+ 3 1))"), snapshot(81)),
     ],
 )
 def test_parse(

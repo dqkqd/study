@@ -1,4 +1,13 @@
-from tdop.expr import AddExpr, DivExpr, Expr, LiteralExpr, MulExpr, ParenExpr, SubExpr
+from tdop.expr import (
+    AddExpr,
+    DivExpr,
+    Expr,
+    LiteralExpr,
+    MulExpr,
+    ParenExpr,
+    PowExpr,
+    SubExpr,
+)
 from tdop.token import Token, TokenType, Tokenizer
 import typing as t
 
@@ -97,6 +106,7 @@ class InfixParser:
         TokenType.Sub: 20,
         TokenType.Mul: 30,
         TokenType.Div: 30,
+        TokenType.Pow: 40,
     }
 
     @classmethod
@@ -144,3 +154,10 @@ def _(tokenizer: Tokenizer, lhs: Expr, token: Token) -> DivExpr:
     assert token.token_type == TokenType.Div
     rhs = parse_expr(tokenizer, InfixParser.binding_powers[token.token_type])
     return DivExpr(lhs=lhs, rhs=rhs)
+
+
+@InfixParser.register(TokenType.Pow)
+def _(tokenizer: Tokenizer, base: Expr, token: Token) -> PowExpr:
+    assert token.token_type == TokenType.Pow
+    exponent = parse_expr(tokenizer, InfixParser.binding_powers[token.token_type])
+    return PowExpr(base=base, exponent=exponent)

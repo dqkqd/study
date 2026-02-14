@@ -10,6 +10,7 @@ class TokenType(enum.StrEnum):
     Sub = enum.auto()
     Mul = enum.auto()
     Div = enum.auto()
+    Pow = enum.auto()
     LParen = enum.auto()
     RParen = enum.auto()
     Eof = enum.auto()
@@ -33,6 +34,8 @@ class Token(ABC):
                 return Token.mul()
             case "/":
                 return Token.div()
+            case "^":
+                return Token.pow()
             case "(":
                 return Token.lparen()
             case ")":
@@ -61,6 +64,10 @@ class Token(ABC):
         return Token(token_type=TokenType.Div, value="/")
 
     @classmethod
+    def pow(cls) -> Token:
+        return Token(token_type=TokenType.Pow, value="^")
+
+    @classmethod
     def lparen(cls) -> Token:
         return Token(token_type=TokenType.LParen, value="(")
 
@@ -79,7 +86,7 @@ class Tokenizer:
 
     @classmethod
     def from_str(cls, program: str) -> Tokenizer:
-        raw_tokens: list[str] = re.findall(r"\d+|[+\-*/()]", program)
+        raw_tokens: list[str] = re.findall(r"\d+|[+\-*/^()]", program)
         tokens = [Token.from_str(s) for s in raw_tokens]
         tokens.append(Token.eof())
         return Tokenizer(tokens=list(reversed(tokens)))
