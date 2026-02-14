@@ -35,7 +35,7 @@ class AddExpr(Expr):
     @t.override
     def __repr__(self) -> str:
         if self.lhs is None:
-            return f"(+ {self.rhs})"
+            return f"{self.rhs}"
         return f"(+ {self.lhs} {self.rhs})"
 
     @t.override
