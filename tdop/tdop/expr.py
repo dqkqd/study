@@ -29,37 +29,36 @@ class LiteralExpr(Expr):
 @t.final
 @dataclass(kw_only=True)
 class AddExpr(Expr):
-    first: Expr
-    second: Expr | None
+    lhs: Expr | None
+    rhs: Expr
 
     @t.override
     def __repr__(self) -> str:
-        if self.second is None:
-            return f"(+ {self.first})"
-        return f"(+ {self.first} {self.second})"
+        if self.lhs is None:
+            return f"(+ {self.rhs})"
+        return f"(+ {self.lhs} {self.rhs})"
 
     @t.override
     def evalulate(self) -> int:
-        first = self.first.evalulate()
-        second = self.second.evalulate() if self.second is not None else 0
-        return first + second
+        if self.lhs is None:
+            return self.rhs.evalulate()
+        return self.lhs.evalulate() + self.rhs.evalulate()
 
 
 @t.final
 @dataclass(kw_only=True)
 class SubExpr(Expr):
-    first: Expr
-    second: Expr | None
+    lhs: Expr | None
+    rhs: Expr
 
     @t.override
     def __repr__(self) -> str:
-        if self.second is None:
-            return f"(- {self.first})"
-        return f"(- {self.first} {self.second})"
+        if self.lhs is None:
+            return f"(- {self.rhs})"
+        return f"(- {self.lhs} {self.rhs})"
 
     @t.override
     def evalulate(self) -> int:
-        first = self.first.evalulate()
-        if self.second is None:
-            return -first
-        return first - self.second.evalulate()
+        if self.lhs is None:
+            return -self.rhs.evalulate()
+        return self.lhs.evalulate() - self.rhs.evalulate()

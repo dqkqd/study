@@ -9,6 +9,8 @@ import tdop
         ("1", "1", 1),
         ("+1", "(+ 1)", 1),
         ("-1", "(- 1)", -1),
+        ("1 + 2", "(+ 1 2)", 3),
+        ("1 - 2", "(- 1 2)", -1),
     ],
 )
 def test_parse(program: str, expected_parsed_expr: str, expected_evaluated_value: int):
