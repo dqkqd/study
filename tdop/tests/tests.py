@@ -20,6 +20,11 @@ import tdop
         ("1 + 3 / 2", snapshot("(+ 1 (/ 3 2))"), snapshot(2.5)),
         ("1 + 2 * 3 * 4 + 5", snapshot("(+ (+ 1 (* (* 2 3) 4)) 5)"), snapshot(30)),
         ("1 + 2 * 3 * 4 * 5", snapshot("(+ 1 (* (* (* 2 3) 4) 5))"), snapshot(121)),
+        ("(1)", snapshot("1"), snapshot(1)),
+        ("(-1)", snapshot("(- 1)"), snapshot(-1)),
+        ("(+1)", snapshot("(+ 1)"), snapshot(1)),
+        ("2 * (3 + 4)", snapshot("(* 2 (+ 3 4))"), snapshot(14)),
+        ("(3 + 4) * 2", snapshot("(* (+ 3 4) 2)"), snapshot(14)),
     ],
 )
 def test_parse(

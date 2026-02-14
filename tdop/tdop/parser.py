@@ -1,4 +1,4 @@
-from tdop.expr import AddExpr, DivExpr, Expr, LiteralExpr, MulExpr, SubExpr
+from tdop.expr import AddExpr, DivExpr, Expr, LiteralExpr, MulExpr, ParenExpr, SubExpr
 from tdop.token import Token, TokenType, Tokenizer
 import typing as t
 
@@ -31,6 +31,7 @@ class PrefixParser:
     parsers: t.ClassVar[dict[TokenType, Fn]] = {}
 
     binding_powers: dict[TokenType, int] = {
+        TokenType.LParen: 0,
         TokenType.Literal: 10,
         TokenType.Add: 100,
         TokenType.Sub: 100,
@@ -76,12 +77,21 @@ def _(tokenizer: Tokenizer, token: Token) -> SubExpr:
     return SubExpr(lhs=None, rhs=rhs)
 
 
+@PrefixParser.register(TokenType.LParen)
+def _(tokenizer: Tokenizer, token: Token) -> ParenExpr:
+    assert token.token_type == TokenType.LParen
+    inner = parse_expr(tokenizer, PrefixParser.binding_powers[token.token_type])
+    tokenizer.next_expect(TokenType.RParen)
+    return ParenExpr(inner=inner)
+
+
 class InfixParser:
     type Fn = t.Callable[[Tokenizer, Expr, Token], Expr]
 
     parsers: t.ClassVar[dict[TokenType, Fn]] = {}
 
     binding_powers: dict[TokenType, int] = {
+        TokenType.RParen: 0,
         TokenType.Literal: 10,
         TokenType.Add: 20,
         TokenType.Sub: 20,

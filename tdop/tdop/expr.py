@@ -92,3 +92,17 @@ class DivExpr(Expr):
     @t.override
     def evalulate(self) -> float:
         return self.lhs.evalulate() / self.rhs.evalulate()
+
+
+@t.final
+@dataclass(kw_only=True)
+class ParenExpr(Expr):
+    inner: Expr
+
+    @t.override
+    def __repr__(self) -> str:
+        return f"{self.inner}"
+
+    @t.override
+    def evalulate(self) -> float:
+        return self.inner.evalulate()

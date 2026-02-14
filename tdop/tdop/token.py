@@ -10,6 +10,8 @@ class TokenType(enum.StrEnum):
     Sub = enum.auto()
     Mul = enum.auto()
     Div = enum.auto()
+    LParen = enum.auto()
+    RParen = enum.auto()
     Eof = enum.auto()
 
 
@@ -31,6 +33,10 @@ class Token(ABC):
                 return Token.mul()
             case "/":
                 return Token.div()
+            case "(":
+                return Token.lparen()
+            case ")":
+                return Token.rparen()
             case _:
                 raise SyntaxError(f"bad token: {s}")
 
@@ -55,6 +61,14 @@ class Token(ABC):
         return Token(token_type=TokenType.Div, value="/")
 
     @classmethod
+    def lparen(cls) -> Token:
+        return Token(token_type=TokenType.LParen, value="(")
+
+    @classmethod
+    def rparen(cls) -> Token:
+        return Token(token_type=TokenType.RParen, value=")")
+
+    @classmethod
     def eof(cls) -> Token:
         return Token(token_type=TokenType.Eof, value="")
 
@@ -77,3 +91,8 @@ class Tokenizer:
         if self.tokens:
             return self.tokens[len(self.tokens) - 1]
         return None
+
+    def next_expect(self, expect: TokenType):
+        token = self.next()
+        if token.token_type != expect:
+            raise ValueError(f"Expected {expect}, got {token.token_type}")
