@@ -1,6 +1,7 @@
 # Top Down Operator Precedence
 
-Top Down Operator Precedence (Pratt parsing) implemented in Python.
+Top Down Operator Precedence (Pratt parsing) implemented in
+[Python](./python-tdop/) and [Rust](./rust-tdop/).
 
 The code depends heavily on these tutorials:
 
