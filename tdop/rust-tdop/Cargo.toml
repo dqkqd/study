@@ -1,0 +1,11 @@
+[package]
+name = "rust-tdop"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.101"
+regex = "1.12.3"
+
+[dev-dependencies]
+rstest = "0.26.1"
