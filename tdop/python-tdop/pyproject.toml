@@ -6,4 +6,9 @@ readme = "README.md"
 requires-python = ">=3.14"
 
 [dependency-groups]
-dev = ["inline-snapshot>=0.32.0", "pytest>=9.0.2", "ruff>=0.15.0", "ty>=0.0.17"]
+dev = [
+    "inline-snapshot>=0.32.0",
+    "pytest>=9.0.2",
+    "ruff>=0.15.0",
+    "ty>=0.0.17",
+]

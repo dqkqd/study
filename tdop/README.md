@@ -1,4 +1,8 @@
 # Top Down Operator Precedence
 
-Sample python code for Top Down Operator Precedence. Copied (with modification)
-from <https://eli.thegreenplace.net/2010/01/02/top-down-operator-precedence-parsing>
+Top Down Operator Precedence (Pratt parsing) implemented in Python.
+
+The code depends heavily on these tutorials:
+
+- <https://web.archive.org/web/20201112025403/http://effbot.org/zone/simple-top-down-parsing.html>
+- <https://journal.stuffwithstuff.com/2011/03/19/pratt-parsers-expression-parsing-made-easy/>
